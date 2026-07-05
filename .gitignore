@@ -1,0 +1,36 @@
+# Build output
+build/
+out/
+bin/
+obj/
+x64/
+x86/
+Debug/
+Release/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Notepad++ local plugin artifacts
+*.dll
+*.pdb
+*.exp
+*.lib
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
