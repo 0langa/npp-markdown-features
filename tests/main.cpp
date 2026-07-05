@@ -60,11 +60,18 @@ void TestFeatureToggle() {
     std::string html;
     nmf::MarkdownViewFeature feature(
         [](const nmf::ActiveDocument&) { return std::string("# Hello"); },
-        [&](HWND, const std::string& rendered, const std::wstring&) {
+        [](const nmf::ActiveDocument&) { return 0.4; },
+        [](const nmf::ActiveDocument&) { return 0.7; },
+        [&](HWND, const std::string& rendered, const std::wstring&, double ratio) {
             ++shown;
             html = rendered;
+            assert(ratio == 0.4);
         },
-        [&]() { hidden = true; },
+        [&]() {
+            hidden = true;
+            return 0.6;
+        },
+        [](const nmf::ActiveDocument&, double) {},
         [](const std::wstring&) {});
 
     nmf::AppSettings settings;

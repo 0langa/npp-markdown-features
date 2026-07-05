@@ -3,6 +3,8 @@
 #include "core/Strings.h"
 #include "rendering/WebViewUserDataFolder.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <shellapi.h>
 
@@ -47,10 +49,11 @@ WebViewHost::~WebViewHost() {
     Destroy();
 }
 
-bool WebViewHost::ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath) {
+bool WebViewHost::ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath, double scrollRatio) {
     parentScintilla_ = scintillaParent;
     sourcePath_ = sourcePath;
     pendingHtml_ = Utf8HtmlToWide(html);
+    pendingScrollRatio_ = std::clamp(scrollRatio, 0.0, 1.0);
     if (!EnsureHostWindow(scintillaParent)) {
         return false;
     }
@@ -64,11 +67,17 @@ bool WebViewHost::ShowHtml(HWND scintillaParent, const std::string& html, const 
     return true;
 }
 
-void WebViewHost::Hide() {
+double WebViewHost::Hide() {
+    CaptureScrollRatio();
     if (hostWindow_ != nullptr) {
         ::KillTimer(hostWindow_, 1);
         ::ShowWindow(hostWindow_, SW_HIDE);
     }
+    return lastScrollRatio_;
+}
+
+double WebViewHost::LastScrollRatio() const {
+    return lastScrollRatio_;
 }
 
 void WebViewHost::Resize() {
@@ -181,6 +190,15 @@ bool WebViewHost::EnsureWebView() {
                                         })
                                         .Get(),
                                     &token);
+                                EventRegistrationToken navigationCompletedToken{};
+                                webView_->add_NavigationCompleted(
+                                    Callback<ICoreWebView2NavigationCompletedEventHandler>(
+                                        [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
+                                            ApplyPendingScroll();
+                                            return S_OK;
+                                        })
+                                        .Get(),
+                                    &navigationCompletedToken);
                             }
                             Resize();
                             NavigatePendingHtml();
@@ -202,6 +220,33 @@ void WebViewHost::NavigatePendingHtml() {
     if (webView_ && !pendingHtml_.empty()) {
         webView_->NavigateToString(pendingHtml_.c_str());
     }
+}
+
+void WebViewHost::ApplyPendingScroll() {
+    if (!webView_) {
+        return;
+    }
+    std::wstring script = L"(() => { const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); window.scrollTo(0, max * ";
+    script += std::to_wstring(pendingScrollRatio_);
+    script += L"); return true; })();";
+    webView_->ExecuteScript(script.c_str(), nullptr);
+    lastScrollRatio_ = pendingScrollRatio_;
+}
+
+void WebViewHost::CaptureScrollRatio() {
+    if (!webView_) {
+        return;
+    }
+    webView_->ExecuteScript(
+        L"(() => { const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); return window.scrollY / max; })();",
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [this](HRESULT result, LPCWSTR jsonResult) -> HRESULT {
+                if (SUCCEEDED(result) && jsonResult != nullptr) {
+                    lastScrollRatio_ = std::clamp(_wtof(jsonResult), 0.0, 1.0);
+                }
+                return S_OK;
+            })
+            .Get());
 }
 
 void WebViewHost::SetWebViewCreationErrorShown() {
@@ -229,6 +274,9 @@ LRESULT CALLBACK WebViewHost::WindowProc(HWND hwnd, UINT message, WPARAM wParam,
             return ::DefWindowProc(hwnd, message, wParam, lParam);
         }
         self->Resize();
+        if (message == WM_TIMER) {
+            self->CaptureScrollRatio();
+        }
     }
     return ::DefWindowProc(hwnd, message, wParam, lParam);
 }

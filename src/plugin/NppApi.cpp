@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 
 namespace nmf::npp {
 
@@ -66,6 +67,30 @@ void SetMenuChecked(HWND nppHandle, int commandId, bool checked) {
     if (nppHandle != nullptr && commandId != 0) {
         ::SendMessage(nppHandle, NPPM_SETMENUITEMCHECK, commandId, checked ? TRUE : FALSE);
     }
+}
+
+double ScintillaViewportRatio(HWND scintilla) {
+    if (scintilla == nullptr) {
+        return 0.0;
+    }
+    const auto firstVisible = static_cast<double>(::SendMessage(scintilla, SCI_GETFIRSTVISIBLELINE, 0, 0));
+    const auto lineCount = static_cast<double>(::SendMessage(scintilla, SCI_GETLINECOUNT, 0, 0));
+    const auto linesOnScreen = static_cast<double>(::SendMessage(scintilla, SCI_LINESONSCREEN, 0, 0));
+    const auto maxFirstVisible = std::max(1.0, lineCount - linesOnScreen);
+    return std::clamp(firstVisible / maxFirstVisible, 0.0, 1.0);
+}
+
+void SetScintillaViewportRatio(HWND scintilla, double ratio) {
+    if (scintilla == nullptr) {
+        return;
+    }
+    ratio = std::clamp(ratio, 0.0, 1.0);
+    const auto current = static_cast<int>(::SendMessage(scintilla, SCI_GETFIRSTVISIBLELINE, 0, 0));
+    const auto lineCount = static_cast<double>(::SendMessage(scintilla, SCI_GETLINECOUNT, 0, 0));
+    const auto linesOnScreen = static_cast<double>(::SendMessage(scintilla, SCI_LINESONSCREEN, 0, 0));
+    const auto maxFirstVisible = std::max(0.0, lineCount - linesOnScreen);
+    const auto target = static_cast<int>(maxFirstVisible * ratio);
+    ::SendMessage(scintilla, SCI_LINESCROLL, 0, target - current);
 }
 
 }  // namespace nmf::npp

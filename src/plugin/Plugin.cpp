@@ -4,8 +4,6 @@
 #include "core/Strings.h"
 #include "plugin/NppApi.h"
 #include "rendering/WebViewHost.h"
-#include "ui/AboutDialog.h"
-#include "ui/SettingsDialog.h"
 #include "ui/ToolbarIcon.h"
 
 #include <array>
@@ -18,11 +16,8 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 4;
+constexpr int kCommandCount = 1;
 constexpr int kToggleIndex = 0;
-constexpr int kRefreshIndex = 1;
-constexpr int kSettingsIndex = 2;
-constexpr int kAboutIndex = 3;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -87,11 +82,20 @@ void EnsureInitialized() {
 
     auto markdownFeature = std::make_unique<nmf::MarkdownViewFeature>(
         ReadDocumentText,
-        [](HWND scintilla, const std::string& html, const std::wstring& sourcePath) {
-            g_webView.ShowHtml(scintilla, html, sourcePath);
+        [](const nmf::ActiveDocument& document) {
+            return nmf::npp::ScintillaViewportRatio(document.scintilla);
+        },
+        [](const nmf::ActiveDocument&) {
+            return g_webView.LastScrollRatio();
+        },
+        [](HWND scintilla, const std::string& html, const std::wstring& sourcePath, double ratio) {
+            g_webView.ShowHtml(scintilla, html, sourcePath, ratio);
         },
         []() {
-            g_webView.Hide();
+            return g_webView.Hide();
+        },
+        [](const nmf::ActiveDocument& document, double ratio) {
+            nmf::npp::SetScintillaViewportRatio(document.scintilla, ratio);
         },
         [](const std::wstring& status) {
             nmf::npp::SetStatus(g_nppData._nppHandle, status);
@@ -111,29 +115,6 @@ void ToggleRenderedView() {
     SaveSettings();
 }
 
-void RefreshRenderedView() {
-    EnsureInitialized();
-    g_features.DispatchCommand(PluginCommand::RefreshRenderedView, ActiveDocument());
-}
-
-void OpenSettings() {
-    EnsureInitialized();
-    if (g_markdownFeature == nullptr || g_settingsStore == nullptr) {
-        return;
-    }
-    auto settings = g_markdownFeature->Settings();
-    if (nmf::ShowSettingsDialog(g_nppData._nppHandle, settings, g_settingsStore->Path())) {
-        g_markdownFeature->UpdateSettings(settings);
-        g_features.DispatchCommand(PluginCommand::RefreshRenderedView, ActiveDocument());
-        UpdateToggleCheck();
-        SaveSettings();
-    }
-}
-
-void OpenAbout() {
-    nmf::ShowAboutDialog(g_nppData._nppHandle);
-}
-
 void SetCommand(int index, const wchar_t* name, nmf::npp::PFUNCPLUGINCMD callback, bool checked = false) {
     wcsncpy_s(g_funcItems[index]._itemName, name, _TRUNCATE);
     g_funcItems[index]._pFunc = callback;
@@ -148,9 +129,6 @@ void RegisterCommands() {
         return;
     }
     SetCommand(kToggleIndex, L"Toggle Rendered View", ToggleRenderedView);
-    SetCommand(kRefreshIndex, L"Refresh Rendered View", RefreshRenderedView);
-    SetCommand(kSettingsIndex, L"Settings...", OpenSettings);
-    SetCommand(kAboutIndex, L"About", OpenAbout);
     registered = true;
 }
 

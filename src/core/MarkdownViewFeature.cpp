@@ -6,8 +6,21 @@
 
 namespace nmf {
 
-MarkdownViewFeature::MarkdownViewFeature(ReadTextCallback readText, ShowHtmlCallback showHtml, HideCallback hide, StatusCallback status)
-    : readText_(std::move(readText)), showHtml_(std::move(showHtml)), hide_(std::move(hide)), status_(std::move(status)) {}
+MarkdownViewFeature::MarkdownViewFeature(
+    ReadTextCallback readText,
+    ReadViewportCallback readRawViewport,
+    ReadViewportCallback readRenderedViewport,
+    ShowHtmlCallback showHtml,
+    HideCallback hide,
+    SetViewportCallback setRawViewport,
+    StatusCallback status)
+    : readText_(std::move(readText)),
+      readRawViewport_(std::move(readRawViewport)),
+      readRenderedViewport_(std::move(readRenderedViewport)),
+      showHtml_(std::move(showHtml)),
+      hide_(std::move(hide)),
+      setRawViewport_(std::move(setRawViewport)),
+      status_(std::move(status)) {}
 
 std::wstring MarkdownViewFeature::Id() const {
     return L"markdownView";
@@ -29,7 +42,17 @@ void MarkdownViewFeature::SaveSettings(AppSettings& settings) const {
 
 void MarkdownViewFeature::OnCommand(PluginCommand command, const ActiveDocument& document) {
     if (command == PluginCommand::ToggleRenderedView) {
-        renderedMode_ = !renderedMode_;
+        if (renderedMode_) {
+            const double ratio = hide_();
+            renderedMode_ = false;
+            if (IsMarkdown(document)) {
+                setRawViewport_(document, ratio);
+            }
+            status_(L"Markdown Features: raw view");
+            return;
+        }
+        pendingRenderRatio_ = readRawViewport_(document);
+        renderedMode_ = true;
         ApplyDocument(document, true);
         return;
     }
@@ -73,7 +96,9 @@ void MarkdownViewFeature::ApplyDocument(const ActiveDocument& document, bool for
     try {
         const auto markdown = readText_(document);
         const auto rendered = renderer_.Render(markdown, document.path);
-        showHtml_(document.scintilla, rendered.documentHtml, document.path);
+        const double ratio = pendingRenderRatio_ >= 0.0 ? pendingRenderRatio_ : readRenderedViewport_(document);
+        pendingRenderRatio_ = -1.0;
+        showHtml_(document.scintilla, rendered.documentHtml, document.path, ratio);
         status_(L"Markdown Features: rendered view");
     } catch (...) {
         hide_();

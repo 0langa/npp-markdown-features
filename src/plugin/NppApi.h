@@ -29,6 +29,10 @@ constexpr UINT SCI_GETLENGTH = 2006;
 constexpr UINT SCI_GETTEXT = 2182;
 constexpr UINT SCI_GETCODEPAGE = 2137;
 constexpr UINT SCI_SETFOCUS = 2380;
+constexpr UINT SCI_GETFIRSTVISIBLELINE = 2152;
+constexpr UINT SCI_GETLINECOUNT = 2154;
+constexpr UINT SCI_LINESONSCREEN = 2370;
+constexpr UINT SCI_LINESCROLL = 2168;
 constexpr int SC_CP_UTF8 = 65001;
 
 constexpr int STATUSBAR_TYPING_MODE = 5;
@@ -94,5 +98,7 @@ std::string CurrentScintillaText(HWND scintilla);
 bool CurrentScintillaIsUtf8(HWND scintilla);
 void SetStatus(HWND nppHandle, const std::wstring& text);
 void SetMenuChecked(HWND nppHandle, int commandId, bool checked);
+double ScintillaViewportRatio(HWND scintilla);
+void SetScintillaViewportRatio(HWND scintilla, double ratio);
 
 }  // namespace nmf::npp

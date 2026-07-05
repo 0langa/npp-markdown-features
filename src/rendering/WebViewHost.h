@@ -17,8 +17,9 @@ public:
     WebViewHost(const WebViewHost&) = delete;
     WebViewHost& operator=(const WebViewHost&) = delete;
 
-    bool ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath);
-    void Hide();
+    bool ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath, double scrollRatio);
+    double Hide();
+    double LastScrollRatio() const;
     void Resize();
     void Destroy();
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -27,6 +28,8 @@ private:
     bool EnsureHostWindow(HWND scintillaParent);
     bool EnsureWebView();
     void NavigatePendingHtml();
+    void ApplyPendingScroll();
+    void CaptureScrollRatio();
     void SetWebViewCreationErrorShown();
 
     HWND parentScintilla_{};
@@ -34,6 +37,8 @@ private:
     std::wstring sourcePath_{};
     std::wstring pendingHtml_{};
     std::wstring userDataFolder_{};
+    double pendingScrollRatio_{0.0};
+    double lastScrollRatio_{0.0};
     bool webViewErrorShown_{false};
     bool webViewCreating_{false};
     Microsoft::WRL::ComPtr<ICoreWebView2Environment> environment_;
