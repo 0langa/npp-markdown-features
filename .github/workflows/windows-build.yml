@@ -1,0 +1,25 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test
+        run: pwsh ./scripts/build.ps1 -Configuration Release
+
+      - name: Package
+        run: pwsh ./scripts/package.ps1 -Configuration Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NppMarkdownFeatures-v0.1.0-win-x64
+          path: dist/NppMarkdownFeatures-v0.1.0-win-x64.zip

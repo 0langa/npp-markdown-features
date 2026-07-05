@@ -3,6 +3,7 @@ build/
 out/
 bin/
 obj/
+dist/
 x64/
 x86/
 Debug/
