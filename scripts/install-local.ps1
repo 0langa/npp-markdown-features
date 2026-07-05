@@ -38,8 +38,9 @@ if (-not $isAdmin) {
     Copy-Item -LiteralPath $sourceDll -Destination $targetDll -Force
 }
 
-if (Test-Path $targetDll) {
+if ((Test-Path $targetDll) -and ((Get-FileHash -Algorithm SHA256 -LiteralPath $sourceDll).Hash -eq (Get-FileHash -Algorithm SHA256 -LiteralPath $targetDll).Hash)) {
     Write-Host "Installed: $targetDll"
 } else {
-    Write-Warning "Install copy was not verified. If UAC was cancelled, run this script from an elevated PowerShell."
+    Write-Warning "Install copy was not verified. If UAC was cancelled or Program Files remains protected, run the elevated command shown above from an Administrator PowerShell."
+    exit 1
 }

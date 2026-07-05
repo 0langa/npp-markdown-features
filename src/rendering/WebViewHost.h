@@ -27,13 +27,14 @@ private:
     bool EnsureHostWindow(HWND scintillaParent);
     bool EnsureWebView();
     void NavigatePendingHtml();
-    void SetRuntimeMissingErrorShown();
+    void SetWebViewCreationErrorShown();
 
     HWND parentScintilla_{};
     HWND hostWindow_{};
     std::wstring sourcePath_{};
     std::wstring pendingHtml_{};
-    bool runtimeMissingErrorShown_{false};
+    std::wstring userDataFolder_{};
+    bool webViewErrorShown_{false};
     bool webViewCreating_{false};
     Microsoft::WRL::ComPtr<ICoreWebView2Environment> environment_;
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;

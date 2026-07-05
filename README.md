@@ -45,6 +45,12 @@ Version `0.1.0` builds a native x64 Notepad++ plugin DLL with:
 - WebView2 rendered Markdown overlay
 - core unit tests
 
+WebView2 profile data is stored under the current user's local app data, not under the Notepad++ installation directory:
+
+```text
+%LOCALAPPDATA%\NppMarkdownFeatures\WebView2
+```
+
 ## Build
 
 Requirements:

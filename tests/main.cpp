@@ -2,6 +2,7 @@
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
 #include "rendering/MarkdownRenderer.h"
+#include "rendering/WebViewUserDataFolder.h"
 
 #include <cassert>
 #include <filesystem>
@@ -84,6 +85,13 @@ void TestFeatureToggle() {
     assert(hidden);
 }
 
+void TestWebViewUserDataFolder() {
+    const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
+    assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
+    assert(folder.find(L"WebView2") != std::wstring::npos);
+    assert(folder.find(L"Program Files") == std::wstring::npos);
+}
+
 }  // namespace
 
 int main() {
@@ -92,6 +100,7 @@ int main() {
     TestMarkdownRender();
     TestHtmlEscape();
     TestFeatureToggle();
+    TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;
 }

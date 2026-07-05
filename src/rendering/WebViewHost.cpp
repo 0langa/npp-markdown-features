@@ -1,7 +1,9 @@
 #include "rendering/WebViewHost.h"
 
 #include "core/Strings.h"
+#include "rendering/WebViewUserDataFolder.h"
 
+#include <filesystem>
 #include <shellapi.h>
 
 using Microsoft::WRL::Callback;
@@ -130,15 +132,18 @@ bool WebViewHost::EnsureWebView() {
         return true;
     }
     webViewCreating_ = true;
+    const auto userDataFolder = DefaultWebViewUserDataFolder();
+    std::filesystem::create_directories(userDataFolder);
+    userDataFolder_ = userDataFolder.wstring();
     const HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
         nullptr,
-        nullptr,
+        userDataFolder_.c_str(),
         nullptr,
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
             [this](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
                 webViewCreating_ = false;
                 if (FAILED(result) || environment == nullptr || hostWindow_ == nullptr) {
-                    SetRuntimeMissingErrorShown();
+                    SetWebViewCreationErrorShown();
                     return S_OK;
                 }
                 environment_ = environment;
@@ -147,7 +152,7 @@ bool WebViewHost::EnsureWebView() {
                     Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
                         [this](HRESULT controllerResult, ICoreWebView2Controller* controller) -> HRESULT {
                             if (FAILED(controllerResult) || controller == nullptr) {
-                                SetRuntimeMissingErrorShown();
+                                SetWebViewCreationErrorShown();
                                 return S_OK;
                             }
                             controller_ = controller;
@@ -187,7 +192,7 @@ bool WebViewHost::EnsureWebView() {
             .Get());
     if (FAILED(hr)) {
         webViewCreating_ = false;
-        SetRuntimeMissingErrorShown();
+        SetWebViewCreationErrorShown();
         return false;
     }
     return true;
@@ -199,12 +204,15 @@ void WebViewHost::NavigatePendingHtml() {
     }
 }
 
-void WebViewHost::SetRuntimeMissingErrorShown() {
-    if (!runtimeMissingErrorShown_) {
-        runtimeMissingErrorShown_ = true;
+void WebViewHost::SetWebViewCreationErrorShown() {
+    if (!webViewErrorShown_) {
+        webViewErrorShown_ = true;
+        std::wstring message = L"Microsoft Edge WebView2 could not start.\n\nData folder:\n";
+        message += userDataFolder_.empty() ? L"(unknown)" : userDataFolder_;
+        message += L"\n\nCheck WebView2 Runtime installation and folder permissions.";
         ::MessageBox(
             hostWindow_,
-            L"Microsoft Edge WebView2 Runtime is required for rendered Markdown view.",
+            message.c_str(),
             L"Markdown Features",
             MB_OK | MB_ICONERROR);
     }

@@ -63,6 +63,7 @@ add_library(nmf_core
   src/core/SettingsStore.cpp
   src/core/Strings.cpp
   src/rendering/MarkdownRenderer.cpp
+  src/rendering/WebViewUserDataFolder.cpp
 )
 target_include_directories(nmf_core PUBLIC src)
 target_link_libraries(nmf_core PUBLIC md4c-html nlohmann_json::nlohmann_json)
