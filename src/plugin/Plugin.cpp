@@ -4,6 +4,7 @@
 #include "core/Strings.h"
 #include "plugin/NppApi.h"
 #include "rendering/WebViewHost.h"
+#include "ui/SettingsDialog.h"
 #include "ui/ToolbarIcon.h"
 
 #include <array>
@@ -16,8 +17,9 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 1;
+constexpr int kCommandCount = 2;
 constexpr int kToggleIndex = 0;
+constexpr int kSettingsIndex = 1;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -115,6 +117,20 @@ void ToggleRenderedView() {
     SaveSettings();
 }
 
+void OpenSettings() {
+    EnsureInitialized();
+    if (g_markdownFeature == nullptr || g_settingsStore == nullptr) {
+        return;
+    }
+    auto settings = g_markdownFeature->Settings();
+    if (nmf::ShowSettingsDialog(g_nppData._nppHandle, settings, g_settingsStore->Path())) {
+        g_markdownFeature->UpdateSettings(settings);
+        g_features.DispatchCommand(PluginCommand::RefreshRenderedView, ActiveDocument());
+        UpdateToggleCheck();
+        SaveSettings();
+    }
+}
+
 void SetCommand(int index, const wchar_t* name, nmf::npp::PFUNCPLUGINCMD callback, bool checked = false) {
     wcsncpy_s(g_funcItems[index]._itemName, name, _TRUNCATE);
     g_funcItems[index]._pFunc = callback;
@@ -129,6 +145,7 @@ void RegisterCommands() {
         return;
     }
     SetCommand(kToggleIndex, L"Toggle Rendered View", ToggleRenderedView);
+    SetCommand(kSettingsIndex, L"Settings...", OpenSettings);
     registered = true;
 }
 
