@@ -55,10 +55,50 @@ HICON CreateIconFromPixels(COLORREF foreground, COLORREF background) {
     return icon;
 }
 
+HBITMAP CreateBitmapFromPixels(COLORREF foreground, COLORREF background) {
+    constexpr int size = 16;
+    HDC screen = ::GetDC(nullptr);
+    HDC dc = ::CreateCompatibleDC(screen);
+    HBITMAP bitmap = ::CreateCompatibleBitmap(screen, size, size);
+    auto* oldBitmap = static_cast<HBITMAP>(::SelectObject(dc, bitmap));
+
+    HBRUSH bg = ::CreateSolidBrush(background);
+    RECT rect{0, 0, size, size};
+    ::FillRect(dc, &rect, bg);
+    ::DeleteObject(bg);
+
+    HPEN borderPen = ::CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
+    auto* oldPen = static_cast<HPEN>(::SelectObject(dc, borderPen));
+    ::Rectangle(dc, 0, 0, size, size);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(borderPen);
+
+    HPEN fgPen = ::CreatePen(PS_SOLID, 2, foreground);
+    oldPen = static_cast<HPEN>(::SelectObject(dc, fgPen));
+    ::MoveToEx(dc, 4, 3, nullptr);
+    ::LineTo(dc, 4, 13);
+    ::MoveToEx(dc, 4, 3, nullptr);
+    ::LineTo(dc, 8, 9);
+    ::LineTo(dc, 12, 3);
+    ::MoveToEx(dc, 12, 3, nullptr);
+    ::LineTo(dc, 12, 13);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(fgPen);
+
+    ::SelectObject(dc, oldBitmap);
+    ::DeleteDC(dc);
+    ::ReleaseDC(nullptr, screen);
+    return bitmap;
+}
+
 }  // namespace
 
 HICON CreateToolbarIcon(bool darkMode) {
     return CreateIconFromPixels(darkMode ? RGB(245, 245, 245) : RGB(20, 70, 140), darkMode ? RGB(38, 38, 38) : RGB(255, 255, 255));
+}
+
+HBITMAP CreateToolbarBitmap() {
+    return CreateBitmapFromPixels(RGB(20, 70, 140), RGB(255, 255, 255));
 }
 
 }  // namespace nmf

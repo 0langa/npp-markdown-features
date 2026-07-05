@@ -5,5 +5,6 @@
 namespace nmf {
 
 HICON CreateToolbarIcon(bool darkMode);
+HBITMAP CreateToolbarBitmap();
 
 }  // namespace nmf

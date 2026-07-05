@@ -33,6 +33,7 @@ nmf::MarkdownViewFeature* g_markdownFeature = nullptr;
 nmf::WebViewHost g_webView;
 HICON g_lightIcon = nullptr;
 HICON g_darkIcon = nullptr;
+HBITMAP g_toolbarBitmap = nullptr;
 bool g_initialized = false;
 
 nmf::ActiveDocument ActiveDocument() {
@@ -154,6 +155,9 @@ void RegisterCommands() {
 }
 
 void AddToolbarIcon() {
+    if (g_toolbarBitmap == nullptr) {
+        g_toolbarBitmap = nmf::CreateToolbarBitmap();
+    }
     if (g_lightIcon == nullptr) {
         g_lightIcon = nmf::CreateToolbarIcon(false);
     }
@@ -161,6 +165,7 @@ void AddToolbarIcon() {
         g_darkIcon = nmf::CreateToolbarIcon(true);
     }
     nmf::npp::ToolbarIconsWithDarkMode icons{};
+    icons.hToolbarBmp = g_toolbarBitmap;
     icons.hToolbarIcon = g_lightIcon;
     icons.hToolbarIconDarkMode = g_darkIcon;
     ::SendMessage(
@@ -192,6 +197,10 @@ void Shutdown() {
     if (g_darkIcon != nullptr) {
         ::DestroyIcon(g_darkIcon);
         g_darkIcon = nullptr;
+    }
+    if (g_toolbarBitmap != nullptr) {
+        ::DeleteObject(g_toolbarBitmap);
+        g_toolbarBitmap = nullptr;
     }
     g_markdownFeature = nullptr;
     g_settingsStore.reset();
