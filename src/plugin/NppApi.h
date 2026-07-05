@@ -98,7 +98,9 @@ std::string CurrentScintillaText(HWND scintilla);
 bool CurrentScintillaIsUtf8(HWND scintilla);
 void SetStatus(HWND nppHandle, const std::wstring& text);
 void SetMenuChecked(HWND nppHandle, int commandId, bool checked);
+int ScintillaFirstVisibleLine(HWND scintilla);
 double ScintillaViewportRatio(HWND scintilla);
 void SetScintillaViewportRatio(HWND scintilla, double ratio);
+void SetScintillaFirstVisibleLine(HWND scintilla, int line);
 
 }  // namespace nmf::npp

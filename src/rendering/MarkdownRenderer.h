@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/MarkdownOutline.h"
+
 #include <string>
 
 namespace nmf {
@@ -7,6 +9,7 @@ namespace nmf {
 struct RenderedMarkdown {
     std::string bodyHtml;
     std::string documentHtml;
+    MarkdownOutline outline;
 };
 
 class MarkdownRenderer {

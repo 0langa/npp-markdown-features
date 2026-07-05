@@ -10,6 +10,7 @@ MarkdownViewFeature::MarkdownViewFeature(
     ReadTextCallback readText,
     ReadViewportCallback readRawViewport,
     ReadViewportCallback readRenderedViewport,
+    ReadFirstVisibleLineCallback readFirstVisibleLine,
     ShowHtmlCallback showHtml,
     HideCallback hide,
     SetViewportCallback setRawViewport,
@@ -17,6 +18,7 @@ MarkdownViewFeature::MarkdownViewFeature(
     : readText_(std::move(readText)),
       readRawViewport_(std::move(readRawViewport)),
       readRenderedViewport_(std::move(readRenderedViewport)),
+      readFirstVisibleLine_(std::move(readFirstVisibleLine)),
       showHtml_(std::move(showHtml)),
       hide_(std::move(hide)),
       setRawViewport_(std::move(setRawViewport)),
@@ -43,17 +45,21 @@ void MarkdownViewFeature::SaveSettings(AppSettings& settings) const {
 void MarkdownViewFeature::OnCommand(PluginCommand command, const ActiveDocument& document) {
     if (command == PluginCommand::ToggleRenderedView) {
         if (renderedMode_) {
-            const double ratio = hide_();
+            const auto target = hide_();
             renderedMode_ = false;
             if (IsMarkdown(document)) {
-                setRawViewport_(document, ratio);
+                setRawViewport_(document, target, currentOutline_);
             }
             status_(L"Markdown Features: raw view");
             return;
         }
-        pendingRenderRatio_ = readRawViewport_(document);
+
+        const auto markdown = readText_(document);
+        currentOutline_ = MarkdownOutline::Parse(markdown);
+        pendingRenderTarget_ = scrollSync_.RawToRendered(currentOutline_, readFirstVisibleLine_(document), readRawViewport_(document));
+        hasPendingRenderTarget_ = true;
         renderedMode_ = true;
-        ApplyDocument(document, true);
+        ApplyDocument(document, true, markdown);
         return;
     }
     if (command == PluginCommand::RefreshRenderedView) {
@@ -83,6 +89,10 @@ void MarkdownViewFeature::UpdateSettings(MarkdownViewSettings settings) {
 }
 
 void MarkdownViewFeature::ApplyDocument(const ActiveDocument& document, bool forceRender) {
+    ApplyDocument(document, forceRender, std::nullopt);
+}
+
+void MarkdownViewFeature::ApplyDocument(const ActiveDocument& document, bool forceRender, std::optional<std::string> knownMarkdown) {
     if (!renderedMode_ || !IsMarkdown(document) || document.scintilla == nullptr) {
         hide_();
         status_(L"Markdown Features: raw view");
@@ -94,11 +104,14 @@ void MarkdownViewFeature::ApplyDocument(const ActiveDocument& document, bool for
     }
 
     try {
-        const auto markdown = readText_(document);
+        const auto markdown = knownMarkdown ? *knownMarkdown : readText_(document);
         const auto rendered = renderer_.Render(markdown, document.path);
-        const double ratio = pendingRenderRatio_ >= 0.0 ? pendingRenderRatio_ : readRenderedViewport_(document);
-        pendingRenderRatio_ = -1.0;
-        showHtml_(document.scintilla, rendered.documentHtml, document.path, ratio);
+        currentOutline_ = rendered.outline;
+        const auto target = hasPendingRenderTarget_
+            ? pendingRenderTarget_
+            : scrollSync_.RawToRendered(currentOutline_, readFirstVisibleLine_(document), readRenderedViewport_(document));
+        hasPendingRenderTarget_ = false;
+        showHtml_(document.scintilla, rendered.documentHtml, document.path, target);
         status_(L"Markdown Features: rendered view");
     } catch (...) {
         hide_();

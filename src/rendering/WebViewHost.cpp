@@ -49,11 +49,12 @@ WebViewHost::~WebViewHost() {
     Destroy();
 }
 
-bool WebViewHost::ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath, double scrollRatio) {
+bool WebViewHost::ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath, const ScrollTarget& scrollTarget) {
     parentScintilla_ = scintillaParent;
     sourcePath_ = sourcePath;
     pendingHtml_ = Utf8HtmlToWide(html);
-    pendingScrollRatio_ = std::clamp(scrollRatio, 0.0, 1.0);
+    pendingScrollTarget_ = scrollTarget;
+    pendingScrollTarget_.ratio = std::clamp(pendingScrollTarget_.ratio, 0.0, 1.0);
     if (!EnsureHostWindow(scintillaParent)) {
         return false;
     }
@@ -67,17 +68,17 @@ bool WebViewHost::ShowHtml(HWND scintillaParent, const std::string& html, const 
     return true;
 }
 
-double WebViewHost::Hide() {
+ScrollTarget WebViewHost::Hide() {
     CaptureScrollRatio();
     if (hostWindow_ != nullptr) {
         ::KillTimer(hostWindow_, 1);
         ::ShowWindow(hostWindow_, SW_HIDE);
     }
-    return lastScrollRatio_;
+    return lastScrollTarget_;
 }
 
-double WebViewHost::LastScrollRatio() const {
-    return lastScrollRatio_;
+ScrollTarget WebViewHost::LastScrollTarget() const {
+    return lastScrollTarget_;
 }
 
 void WebViewHost::Resize() {
@@ -226,11 +227,17 @@ void WebViewHost::ApplyPendingScroll() {
     if (!webView_) {
         return;
     }
-    std::wstring script = L"(() => { const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); window.scrollTo(0, max * ";
-    script += std::to_wstring(pendingScrollRatio_);
+    std::wstring script = L"(() => {";
+    if (!pendingScrollTarget_.anchorId.empty()) {
+        script += L"const anchor = document.getElementById('";
+        script += Utf8ToWide(pendingScrollTarget_.anchorId);
+        script += L"'); if (anchor) { anchor.scrollIntoView({ block: 'start' }); return true; }";
+    }
+    script += L"const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); window.scrollTo(0, max * ";
+    script += std::to_wstring(pendingScrollTarget_.ratio);
     script += L"); return true; })();";
     webView_->ExecuteScript(script.c_str(), nullptr);
-    lastScrollRatio_ = pendingScrollRatio_;
+    lastScrollTarget_ = pendingScrollTarget_;
 }
 
 void WebViewHost::CaptureScrollRatio() {
@@ -238,11 +245,30 @@ void WebViewHost::CaptureScrollRatio() {
         return;
     }
     webView_->ExecuteScript(
-        L"(() => { const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); return window.scrollY / max; })();",
+        L"(() => {"
+        L"const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);"
+        L"let current = '';"
+        L"for (const h of Array.from(document.querySelectorAll('[data-source-line]'))) {"
+        L"  if (h.getBoundingClientRect().top <= 8) current = h.id || '';"
+        L"}"
+        L"return { ratio: window.scrollY / max, anchorId: current };"
+        L"})();",
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [this](HRESULT result, LPCWSTR jsonResult) -> HRESULT {
                 if (SUCCEEDED(result) && jsonResult != nullptr) {
-                    lastScrollRatio_ = std::clamp(_wtof(jsonResult), 0.0, 1.0);
+                    std::wstring json(jsonResult);
+                    const auto ratioKey = json.find(L"\"ratio\":");
+                    if (ratioKey != std::wstring::npos) {
+                        lastScrollTarget_.ratio = std::clamp(_wtof(json.c_str() + ratioKey + 8), 0.0, 1.0);
+                    }
+                    const auto anchorKey = json.find(L"\"anchorId\":\"");
+                    if (anchorKey != std::wstring::npos) {
+                        const auto anchorStart = anchorKey + 12;
+                        const auto anchorEnd = json.find(L"\"", anchorStart);
+                        if (anchorEnd != std::wstring::npos) {
+                            lastScrollTarget_.anchorId = WideToUtf8(json.substr(anchorStart, anchorEnd - anchorStart));
+                        }
+                    }
                 }
                 return S_OK;
             })

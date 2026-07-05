@@ -44,10 +44,21 @@ void TestSettingsDefaultsAndRoundTrip() {
 void TestMarkdownRender() {
     nmf::MarkdownRenderer renderer;
     const auto rendered = renderer.Render("# Title\n\n- one\n- two\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```cpp\nint x = 1;\n```\n", L"C:\\tmp\\test.md");
-    assert(rendered.bodyHtml.find("<h1>Title</h1>") != std::string::npos);
+    assert(rendered.bodyHtml.find("<h1 id=\"nmf-heading-title\" data-source-line=\"0\">Title</h1>") != std::string::npos);
     assert(rendered.bodyHtml.find("<li>one</li>") != std::string::npos);
     assert(rendered.bodyHtml.find("<table>") != std::string::npos);
     assert(rendered.documentHtml.find("<base href=\"file:///C:/tmp/\">") != std::string::npos);
+}
+
+void TestMarkdownOutline() {
+    const auto outline = nmf::MarkdownOutline::Parse("# One\n\nText\n\n## Two\n\n```md\n# Ignored\n```\n\n# One\n");
+    assert(outline.Headings().size() == 3);
+    assert(outline.Headings()[0].anchorId == "nmf-heading-one");
+    assert(outline.Headings()[1].anchorId == "nmf-heading-two");
+    assert(outline.Headings()[2].anchorId == "nmf-heading-one-2");
+    const auto heading = outline.HeadingAtOrBeforeLine(5);
+    assert(heading);
+    assert(heading->anchorId == "nmf-heading-two");
 }
 
 void TestHtmlEscape() {
@@ -62,16 +73,17 @@ void TestFeatureToggle() {
         [](const nmf::ActiveDocument&) { return std::string("# Hello"); },
         [](const nmf::ActiveDocument&) { return 0.4; },
         [](const nmf::ActiveDocument&) { return 0.7; },
-        [&](HWND, const std::string& rendered, const std::wstring&, double ratio) {
+        [](const nmf::ActiveDocument&) { return 0; },
+        [&](HWND, const std::string& rendered, const std::wstring&, const nmf::ScrollTarget& target) {
             ++shown;
             html = rendered;
-            assert(ratio == 0.4);
+            assert(target.anchorId == "nmf-heading-hello");
         },
         [&]() {
             hidden = true;
-            return 0.6;
+            return nmf::ScrollTarget{0.6, "nmf-heading-hello"};
         },
-        [](const nmf::ActiveDocument&, double) {},
+        [](const nmf::ActiveDocument&, const nmf::ScrollTarget&, const nmf::MarkdownOutline&) {},
         [](const std::wstring&) {});
 
     nmf::AppSettings settings;
@@ -105,6 +117,7 @@ int main() {
     TestExtensionDetection();
     TestSettingsDefaultsAndRoundTrip();
     TestMarkdownRender();
+    TestMarkdownOutline();
     TestHtmlEscape();
     TestFeatureToggle();
     TestWebViewUserDataFolder();

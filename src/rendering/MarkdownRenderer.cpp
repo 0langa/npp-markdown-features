@@ -32,6 +32,21 @@ std::string FileUriFromDirectory(const std::wstring& sourcePath) {
     return "file:///" + uri;
 }
 
+std::string AddHeadingAnchors(std::string body, const MarkdownOutline& outline) {
+    size_t searchFrom = 0;
+    for (const auto& heading : outline.Headings()) {
+        const std::string tag = "<h" + std::to_string(heading.level) + ">";
+        const auto position = body.find(tag, searchFrom);
+        if (position == std::string::npos) {
+            continue;
+        }
+        const std::string replacement = "<h" + std::to_string(heading.level) + " id=\"" + EscapeHtmlText(heading.anchorId) + "\" data-source-line=\"" + std::to_string(heading.line) + "\">";
+        body.replace(position, tag.size(), replacement);
+        searchFrom = position + replacement.size();
+    }
+    return body;
+}
+
 }  // namespace
 
 std::string EscapeHtmlText(const std::string& text) {
@@ -70,7 +85,9 @@ RenderedMarkdown MarkdownRenderer::Render(const std::string& markdownUtf8, const
     if (result != 0) {
         throw std::runtime_error("Markdown rendering failed");
     }
-    return {body, BuildDocument(body, sourcePath)};
+    const auto outline = MarkdownOutline::Parse(markdownUtf8);
+    body = AddHeadingAnchors(std::move(body), outline);
+    return {body, BuildDocument(body, sourcePath), outline};
 }
 
 std::string MarkdownRenderer::BuildDocument(const std::string& bodyHtml, const std::wstring& sourcePath) {

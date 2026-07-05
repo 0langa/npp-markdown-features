@@ -88,16 +88,25 @@ void EnsureInitialized() {
             return nmf::npp::ScintillaViewportRatio(document.scintilla);
         },
         [](const nmf::ActiveDocument&) {
-            return g_webView.LastScrollRatio();
+            return g_webView.LastScrollTarget().ratio;
         },
-        [](HWND scintilla, const std::string& html, const std::wstring& sourcePath, double ratio) {
-            g_webView.ShowHtml(scintilla, html, sourcePath, ratio);
+        [](const nmf::ActiveDocument& document) {
+            return nmf::npp::ScintillaFirstVisibleLine(document.scintilla);
+        },
+        [](HWND scintilla, const std::string& html, const std::wstring& sourcePath, const nmf::ScrollTarget& target) {
+            g_webView.ShowHtml(scintilla, html, sourcePath, target);
         },
         []() {
             return g_webView.Hide();
         },
-        [](const nmf::ActiveDocument& document, double ratio) {
-            nmf::npp::SetScintillaViewportRatio(document.scintilla, ratio);
+        [](const nmf::ActiveDocument& document, const nmf::ScrollTarget& target, const nmf::MarkdownOutline& outline) {
+            if (!target.anchorId.empty()) {
+                if (const auto heading = outline.HeadingByAnchor(target.anchorId)) {
+                    nmf::npp::SetScintillaFirstVisibleLine(document.scintilla, heading->line);
+                    return;
+                }
+            }
+            nmf::npp::SetScintillaViewportRatio(document.scintilla, target.ratio);
         },
         [](const std::wstring& status) {
             nmf::npp::SetStatus(g_nppData._nppHandle, status);

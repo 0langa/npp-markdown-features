@@ -80,6 +80,13 @@ double ScintillaViewportRatio(HWND scintilla) {
     return std::clamp(firstVisible / maxFirstVisible, 0.0, 1.0);
 }
 
+int ScintillaFirstVisibleLine(HWND scintilla) {
+    if (scintilla == nullptr) {
+        return 0;
+    }
+    return static_cast<int>(::SendMessage(scintilla, SCI_GETFIRSTVISIBLELINE, 0, 0));
+}
+
 void SetScintillaViewportRatio(HWND scintilla, double ratio) {
     if (scintilla == nullptr) {
         return;
@@ -91,6 +98,14 @@ void SetScintillaViewportRatio(HWND scintilla, double ratio) {
     const auto maxFirstVisible = std::max(0.0, lineCount - linesOnScreen);
     const auto target = static_cast<int>(maxFirstVisible * ratio);
     ::SendMessage(scintilla, SCI_LINESCROLL, 0, target - current);
+}
+
+void SetScintillaFirstVisibleLine(HWND scintilla, int line) {
+    if (scintilla == nullptr) {
+        return;
+    }
+    const auto current = static_cast<int>(::SendMessage(scintilla, SCI_GETFIRSTVISIBLELINE, 0, 0));
+    ::SendMessage(scintilla, SCI_LINESCROLL, 0, line - current);
 }
 
 }  // namespace nmf::npp

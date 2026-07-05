@@ -1,9 +1,11 @@
 #pragma once
 
 #include "core/Feature.h"
+#include "core/ScrollSync.h"
 #include "rendering/MarkdownRenderer.h"
 
 #include <functional>
+#include <optional>
 
 namespace nmf {
 
@@ -11,15 +13,17 @@ class MarkdownViewFeature final : public Feature {
 public:
     using ReadTextCallback = std::function<std::string(const ActiveDocument&)>;
     using ReadViewportCallback = std::function<double(const ActiveDocument&)>;
-    using ShowHtmlCallback = std::function<void(HWND, const std::string&, const std::wstring&, double)>;
-    using HideCallback = std::function<double()>;
-    using SetViewportCallback = std::function<void(const ActiveDocument&, double)>;
+    using ReadFirstVisibleLineCallback = std::function<int(const ActiveDocument&)>;
+    using ShowHtmlCallback = std::function<void(HWND, const std::string&, const std::wstring&, const ScrollTarget&)>;
+    using HideCallback = std::function<ScrollTarget()>;
+    using SetViewportCallback = std::function<void(const ActiveDocument&, const ScrollTarget&, const MarkdownOutline&)>;
     using StatusCallback = std::function<void(const std::wstring&)>;
 
     MarkdownViewFeature(
         ReadTextCallback readText,
         ReadViewportCallback readRawViewport,
         ReadViewportCallback readRenderedViewport,
+        ReadFirstVisibleLineCallback readFirstVisibleLine,
         ShowHtmlCallback showHtml,
         HideCallback hide,
         SetViewportCallback setRawViewport,
@@ -39,15 +43,20 @@ public:
 
 private:
     void ApplyDocument(const ActiveDocument& document, bool forceRender);
+    void ApplyDocument(const ActiveDocument& document, bool forceRender, std::optional<std::string> knownMarkdown);
     bool IsMarkdown(const ActiveDocument& document) const;
 
     MarkdownViewSettings settings_{};
     bool renderedMode_{false};
-    double pendingRenderRatio_{-1.0};
+    ScrollTarget pendingRenderTarget_{};
+    bool hasPendingRenderTarget_{false};
     MarkdownRenderer renderer_{};
+    SectionScrollSyncStrategy scrollSync_{};
+    MarkdownOutline currentOutline_{};
     ReadTextCallback readText_;
     ReadViewportCallback readRawViewport_;
     ReadViewportCallback readRenderedViewport_;
+    ReadFirstVisibleLineCallback readFirstVisibleLine_;
     ShowHtmlCallback showHtml_;
     HideCallback hide_;
     SetViewportCallback setRawViewport_;

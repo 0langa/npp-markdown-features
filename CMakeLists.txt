@@ -58,7 +58,9 @@ set_target_properties(WebView2LoaderStatic PROPERTIES IMPORTED_LOCATION "${WEBVI
 
 add_library(nmf_core
   src/core/FeatureRegistry.cpp
+  src/core/MarkdownOutline.cpp
   src/core/MarkdownViewFeature.cpp
+  src/core/ScrollSync.cpp
   src/core/Settings.cpp
   src/core/SettingsStore.cpp
   src/core/Strings.cpp
