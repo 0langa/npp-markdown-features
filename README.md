@@ -36,7 +36,7 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.3.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.4.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
@@ -49,6 +49,12 @@ Version `0.3.0` builds a native x64 Notepad++ plugin DLL with:
   - Enter on an empty item removes the marker and ends the list
   - ordered lists renumber automatically when items are inserted; `Renumber List` fixes any block on demand (nesting-aware, keeps the starting number)
   - `Toggle Task Checkbox` (`Ctrl+Shift+X`): checks/unchecks tasks, adds boxes to plain list items, converts plain lines or selections into task items
+- **Table tools**:
+  - `Format Table` (`Ctrl+Shift+T`): pretty-prints the pipe table under the caret (alignment-aware padding, escaped `\|` respected, UTF-8 cell widths); on a lone `| Header |` line it scaffolds the delimiter row and an empty body row
+  - Tab / Shift+Tab move between cells (reformatting as you go); Tab in the last cell appends a new row — works when Notepad++ inserts tab characters (default)
+  - `Table: Insert Column` / `Table: Delete Column` at the caret position
+  - `Table: Cycle Column Alignment` steps the current column through none → left → center → right
+  - smart Tab is part of the `Smart Typing (Lists, Tables)` toggle
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

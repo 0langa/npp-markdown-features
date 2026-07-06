@@ -1,5 +1,6 @@
 #include "core/ListEditing.h"
 #include "core/MarkdownViewFeature.h"
+#include "core/TableEditing.h"
 #include "core/ScrollSync.h"
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
@@ -281,6 +282,92 @@ void TestRenumberListBlock() {
     assert(mixed[3] == "3. restart");
 }
 
+void TestTableParsingAndFormatting() {
+    const std::vector<std::string> lines{
+        "| Name | Value |",
+        "| :-- | --: |",
+        "| a | 1 |",
+        "| longer cell | 22 |",
+    };
+    const auto span = nmf::FindTableBlock(lines, 2);
+    assert(span && span->firstLine == 0 && span->lastLine == 3 && span->hasDelimiter);
+
+    const auto table = nmf::ParseTable(lines);
+    assert(table);
+    assert(table->header.size() == 2);
+    assert(table->header[0] == "Name");
+    assert(table->alignments[0] == nmf::TableAlignment::Left);
+    assert(table->alignments[1] == nmf::TableAlignment::Right);
+    assert(table->rows.size() == 2);
+    assert(table->rows[1][0] == "longer cell");
+
+    const auto formatted = nmf::FormatTable(*table);
+    assert(formatted.size() == 4);
+    assert(formatted[0] == "| Name        | Value |");
+    assert(formatted[1] == "| :---------- | ----: |");
+    assert(formatted[2] == "| a           |     1 |");
+    assert(formatted[3] == "| longer cell |    22 |");
+
+    // Escaped pipes stay inside a cell.
+    const auto cells = nmf::SplitTableRow("| a \\| b | c |");
+    assert(cells.size() == 2);
+    assert(cells[0] == "a \\| b");
+
+    // Missing outer pipes still parse.
+    const auto loose = nmf::SplitTableRow("one | two");
+    assert(loose.size() == 2 && loose[0] == "one" && loose[1] == "two");
+}
+
+void TestTableColumnOps() {
+    nmf::MarkdownTable table;
+    table.header = {"A", "B"};
+    table.alignments = {nmf::TableAlignment::None, nmf::TableAlignment::Right};
+    table.rows = {{"1", "2"}, {"3", "4"}};
+
+    nmf::InsertTableColumn(table, 0);
+    assert(table.header.size() == 3);
+    assert(table.header[1].empty());
+    assert(table.rows[0].size() == 3 && table.rows[0][2] == "2");
+    assert(table.alignments[2] == nmf::TableAlignment::Right);
+
+    assert(nmf::DeleteTableColumn(table, 1));
+    assert(table.header.size() == 2);
+    assert(table.rows[0][1] == "2");
+
+    nmf::CycleTableColumnAlignment(table, 0);
+    assert(table.alignments[0] == nmf::TableAlignment::Left);
+    nmf::CycleTableColumnAlignment(table, 0);
+    assert(table.alignments[0] == nmf::TableAlignment::Center);
+    nmf::CycleTableColumnAlignment(table, 0);
+    assert(table.alignments[0] == nmf::TableAlignment::Right);
+    nmf::CycleTableColumnAlignment(table, 0);
+    assert(table.alignments[0] == nmf::TableAlignment::None);
+
+    nmf::MarkdownTable single;
+    single.header = {"only"};
+    assert(!nmf::DeleteTableColumn(single, 0));
+}
+
+void TestTableCellGeometry() {
+    const std::string formatted = "| Name        | Value |";
+    const auto ranges = nmf::FormattedCellRanges(formatted);
+    assert(ranges.size() == 2);
+    assert(formatted.substr(ranges[0].start, ranges[0].end - ranges[0].start) == "Name       ");
+    assert(formatted.substr(ranges[1].start, ranges[1].end - ranges[1].start) == "Value");
+
+    assert(nmf::CellIndexForColumn("| a | b | c |", 3) == 0);
+    assert(nmf::CellIndexForColumn("| a | b | c |", 6) == 1);
+    assert(nmf::CellIndexForColumn("| a | b | c |", 11) == 2);
+    assert(nmf::CellIndexForColumn("a | b", 1) == 0);
+    assert(nmf::CellIndexForColumn("a | b", 4) == 1);
+
+    assert(nmf::Utf8CodepointCount(u8"héllo") == 5);
+    assert(nmf::IsTableLine("| a |"));
+    assert(nmf::IsTableLine("a | b"));
+    assert(!nmf::IsTableLine("a \\| b"));
+    assert(!nmf::IsTableLine("plain"));
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -305,6 +392,9 @@ int main() {
     TestListContinuation();
     TestToggleTaskCheckbox();
     TestRenumberListBlock();
+    TestTableParsingAndFormatting();
+    TestTableColumnOps();
+    TestTableCellGeometry();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;

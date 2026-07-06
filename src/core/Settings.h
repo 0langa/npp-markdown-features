@@ -25,11 +25,16 @@ struct ListEditingSettings {
     bool smartEnter{true};
 };
 
+struct TableEditingSettings {
+    bool smartTab{true};
+};
+
 struct AppSettings {
     int schemaVersion{1};
     MarkdownViewSettings markdownView{};
     OutlineSettings outline{};
     ListEditingSettings listEditing{};
+    TableEditingSettings tableEditing{};
 };
 
 std::wstring ToString(DisplayMode mode);

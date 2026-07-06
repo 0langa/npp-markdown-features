@@ -93,6 +93,7 @@ constexpr UINT SCI_SETTARGETEND = 2192;
 constexpr UINT SCI_REPLACETARGET = 2194;
 constexpr UINT SCI_LINELENGTH = 2350;
 constexpr UINT SCI_GETSELECTIONS = 2570;
+constexpr UINT SCI_SETSEL = 2160;
 constexpr int SC_EOL_CRLF = 0;
 
 constexpr int STATUSBAR_TYPING_MODE = 5;

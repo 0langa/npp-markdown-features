@@ -4,12 +4,14 @@
 #include "core/Strings.h"
 #include "plugin/ListEditingController.h"
 #include "plugin/NppApi.h"
+#include "plugin/TableEditingController.h"
 #include "rendering/WebViewHost.h"
 #include "ui/OutlinePanel.h"
 #include "ui/SettingsDialog.h"
 #include "ui/ToolbarIcon.h"
 
 #include <array>
+#include <commctrl.h>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -19,13 +21,17 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 6;
+constexpr int kCommandCount = 10;
 constexpr int kToggleIndex = 0;
 constexpr int kOutlineIndex = 1;
 constexpr int kCheckboxIndex = 2;
 constexpr int kRenumberIndex = 3;
-constexpr int kSmartEnterIndex = 4;
-constexpr int kSettingsIndex = 5;
+constexpr int kFormatTableIndex = 4;
+constexpr int kInsertColumnIndex = 5;
+constexpr int kDeleteColumnIndex = 6;
+constexpr int kCycleAlignmentIndex = 7;
+constexpr int kSmartTypingIndex = 8;
+constexpr int kSettingsIndex = 9;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -36,11 +42,15 @@ nmf::MarkdownViewFeature* g_markdownFeature = nullptr;
 nmf::WebViewHost g_webView;
 nmf::OutlinePanel g_outlinePanel;
 nmf::ListEditingController g_listEditing;
+nmf::TableEditingController g_tableEditing;
 UINT_PTR g_outlineTimer = 0;
 HICON g_lightIcon = nullptr;
 HICON g_darkIcon = nullptr;
 HBITMAP g_toolbarBitmap = nullptr;
 bool g_initialized = false;
+bool g_scintillaSubclassed = false;
+bool g_swallowNextTabChar = false;
+constexpr UINT_PTR kScintillaSubclassId = 0x4D46;  // 'MF'
 
 nmf::ActiveDocument ActiveDocument() {
     HWND scintilla = nmf::npp::CurrentScintilla(g_nppData);
@@ -120,6 +130,65 @@ void ScheduleOutlineUpdate() {
     g_outlineTimer = ::SetTimer(nullptr, 0, 350, OutlineTimerProc);
 }
 
+// Intercepts Tab/Shift+Tab ahead of Scintilla for table cell navigation.
+// Scintilla's own Tab handling goes through SCI_TAB (no SCN_CHARADDED), so a
+// notification-based approach cannot see it.
+LRESULT CALLBACK ScintillaSubclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
+    if (message == WM_KEYDOWN) {
+        if (wParam == VK_TAB && g_initialized && g_tableEditing.SmartTabEnabled()) {
+            const bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            const bool alt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
+            if (!ctrl && !alt) {
+                const auto document = ActiveDocument();
+                if (document.scintilla == hwnd && ActiveDocumentIsMarkdown(document)) {
+                    const bool backward = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                    if (g_tableEditing.NavigateCell(hwnd, !backward)) {
+                        // The already-translated WM_CHAR '\t' still arrives; drop it.
+                        g_swallowNextTabChar = true;
+                        return 0;
+                    }
+                }
+            }
+        }
+        if (wParam != VK_TAB) {
+            g_swallowNextTabChar = false;
+        }
+    } else if (message == WM_CHAR) {
+        if (g_swallowNextTabChar && wParam == '\t') {
+            g_swallowNextTabChar = false;
+            return 0;
+        }
+        g_swallowNextTabChar = false;
+    }
+    return ::DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+void EnsureScintillaSubclassed() {
+    if (g_scintillaSubclassed) {
+        return;
+    }
+    if (g_nppData._scintillaMainHandle != nullptr) {
+        ::SetWindowSubclass(g_nppData._scintillaMainHandle, ScintillaSubclassProc, kScintillaSubclassId, 0);
+    }
+    if (g_nppData._scintillaSecondHandle != nullptr) {
+        ::SetWindowSubclass(g_nppData._scintillaSecondHandle, ScintillaSubclassProc, kScintillaSubclassId, 0);
+    }
+    g_scintillaSubclassed = true;
+}
+
+void RemoveScintillaSubclass() {
+    if (!g_scintillaSubclassed) {
+        return;
+    }
+    if (g_nppData._scintillaMainHandle != nullptr) {
+        ::RemoveWindowSubclass(g_nppData._scintillaMainHandle, ScintillaSubclassProc, kScintillaSubclassId);
+    }
+    if (g_nppData._scintillaSecondHandle != nullptr) {
+        ::RemoveWindowSubclass(g_nppData._scintillaSecondHandle, ScintillaSubclassProc, kScintillaSubclassId);
+    }
+    g_scintillaSubclassed = false;
+}
+
 void EnsureInitialized() {
     if (g_initialized || g_nppData._nppHandle == nullptr) {
         return;
@@ -181,8 +250,10 @@ void EnsureInitialized() {
         SaveSettings();
     });
 
+    EnsureScintillaSubclassed();
     g_listEditing.SetSmartEnterEnabled(g_settings.listEditing.smartEnter);
-    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartEnterIndex]._cmdID, g_settings.listEditing.smartEnter);
+    g_tableEditing.SetSmartTabEnabled(g_settings.tableEditing.smartTab);
+    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartTypingIndex]._cmdID, g_settings.listEditing.smartEnter);
 
     g_initialized = true;
     g_features.NotifyDocumentChanged(ActiveDocument());
@@ -227,13 +298,47 @@ void RenumberList() {
     }
 }
 
-void ToggleSmartListEditing() {
+void ToggleSmartTyping() {
     EnsureInitialized();
     const bool enabled = !g_listEditing.SmartEnterEnabled();
     g_listEditing.SetSmartEnterEnabled(enabled);
+    g_tableEditing.SetSmartTabEnabled(enabled);
     g_settings.listEditing.smartEnter = enabled;
-    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartEnterIndex]._cmdID, enabled);
+    g_settings.tableEditing.smartTab = enabled;
+    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartTypingIndex]._cmdID, enabled);
     SaveSettings();
+}
+
+void FormatTable() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        g_tableEditing.FormatTableAtCaret(document.scintilla);
+    }
+}
+
+void TableInsertColumn() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        g_tableEditing.InsertColumn(document.scintilla);
+    }
+}
+
+void TableDeleteColumn() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        g_tableEditing.DeleteColumn(document.scintilla);
+    }
+}
+
+void TableCycleAlignment() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        g_tableEditing.CycleColumnAlignment(document.scintilla);
+    }
 }
 
 void OpenSettings() {
@@ -266,11 +371,16 @@ void RegisterCommands() {
     static nmf::npp::ShortcutKey toggleShortcut{true, false, true, 'M'};
     static nmf::npp::ShortcutKey outlineShortcut{true, false, true, 'O'};
     static nmf::npp::ShortcutKey checkboxShortcut{true, false, true, 'X'};
+    static nmf::npp::ShortcutKey formatTableShortcut{true, false, true, 'T'};
     SetCommand(kToggleIndex, L"Toggle Rendered View", ToggleRenderedView, &toggleShortcut);
     SetCommand(kOutlineIndex, L"Document Outline", ToggleOutlinePanel, &outlineShortcut);
     SetCommand(kCheckboxIndex, L"Toggle Task Checkbox", ToggleTaskCheckbox, &checkboxShortcut);
     SetCommand(kRenumberIndex, L"Renumber List", RenumberList);
-    SetCommand(kSmartEnterIndex, L"Smart List Editing", ToggleSmartListEditing, nullptr, true);
+    SetCommand(kFormatTableIndex, L"Format Table", FormatTable, &formatTableShortcut);
+    SetCommand(kInsertColumnIndex, L"Table: Insert Column", TableInsertColumn);
+    SetCommand(kDeleteColumnIndex, L"Table: Delete Column", TableDeleteColumn);
+    SetCommand(kCycleAlignmentIndex, L"Table: Cycle Column Alignment", TableCycleAlignment);
+    SetCommand(kSmartTypingIndex, L"Smart Typing (Lists, Tables)", ToggleSmartTyping, nullptr, true);
     SetCommand(kSettingsIndex, L"Settings...", OpenSettings);
     registered = true;
 }
@@ -311,6 +421,7 @@ void NotifyFileSaved() {
 
 void Shutdown() {
     SaveSettings();
+    RemoveScintillaSubclass();
     if (g_outlineTimer != 0) {
         ::KillTimer(nullptr, g_outlineTimer);
         g_outlineTimer = 0;

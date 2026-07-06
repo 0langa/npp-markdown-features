@@ -36,6 +36,9 @@ nlohmann::json ToJson(const AppSettings& settings) {
         {"listEditing", {
             {"smartEnter", settings.listEditing.smartEnter},
         }},
+        {"tableEditing", {
+            {"smartTab", settings.tableEditing.smartTab},
+        }},
     };
 }
 
@@ -71,6 +74,9 @@ AppSettings FromJson(const nlohmann::json& json) {
 
     const auto listEditing = json.value("listEditing", nlohmann::json::object());
     settings.listEditing.smartEnter = listEditing.value("smartEnter", true);
+
+    const auto tableEditing = json.value("tableEditing", nlohmann::json::object());
+    settings.tableEditing.smartTab = tableEditing.value("smartTab", true);
     return settings;
 }
 
