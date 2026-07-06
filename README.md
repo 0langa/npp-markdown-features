@@ -36,7 +36,7 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.7.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.8.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
@@ -69,6 +69,9 @@ Version `0.7.0` builds a native x64 Notepad++ plugin DLL with:
   - `Export HTML...` writes a standalone styled HTML file (save dialog, inline CSS, relative images resolve via `<base>`)
   - `Copy as HTML` puts the rendered selection (or whole document) on the clipboard as `HTML Format` — paste rich text straight into Word, Outlook, or Gmail — plus the raw HTML as plain text
   - `Print Rendered View...` opens the WebView2 print dialog (print or save as PDF); renders first if you're in raw mode
+- **TOC & document cleanup** (in the Format submenu):
+  - `Insert/Update TOC` maintains a table of contents between `<!-- toc -->` / `<!-- /toc -->` markers (inserted at the caret on first run) — GitHub-style slugs incl. duplicate suffixes, a single leading H1 is treated as the title, idempotent updates
+  - `Format Document` normalizes conservatively: trims trailing whitespace (two-space hard breaks preserved), collapses blank-line runs, guarantees blank lines around headings and fences, unifies bullet markers to `-`, and reformats every table — fenced code blocks are never touched
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

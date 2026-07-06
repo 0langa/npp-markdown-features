@@ -2,6 +2,7 @@
 #include "core/MarkdownViewFeature.h"
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
+#include "core/TocGenerator.h"
 #include "plugin/ExportController.h"
 #include "plugin/FormattingController.h"
 #include "plugin/LinkController.h"
@@ -19,13 +20,14 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 25;
+constexpr int kCommandCount = 27;
 constexpr int kToggleIndex = 0;
 constexpr int kOutlineIndex = 1;
 constexpr int kCheckboxIndex = 2;
@@ -51,6 +53,8 @@ constexpr int kCheckLinksIndex = 21;
 constexpr int kExportHtmlIndex = 22;
 constexpr int kCopyHtmlIndex = 23;
 constexpr int kPrintIndex = 24;
+constexpr int kFormatDocumentIndex = 25;
+constexpr int kTocIndex = 26;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -430,6 +434,85 @@ void FollowLinkCommand() {
     }
 }
 
+std::vector<std::string> ReadAllLines(HWND scintilla) {
+    std::vector<std::string> lines;
+    const int count = static_cast<int>(::SendMessage(scintilla, nmf::npp::SCI_GETLINECOUNT, 0, 0));
+    lines.reserve(static_cast<size_t>(count));
+    for (int line = 0; line < count; ++line) {
+        lines.push_back(nmf::npp::ScintillaLineText(scintilla, line));
+    }
+    return lines;
+}
+
+std::string DocumentEol(HWND scintilla) {
+    switch (::SendMessage(scintilla, nmf::npp::SCI_GETEOLMODE, 0, 0)) {
+        case 0:
+            return "\r\n";
+        case 1:
+            return "\r";
+        default:
+            return "\n";
+    }
+}
+
+void ReplaceWholeDocument(HWND scintilla, const std::vector<std::string>& lines) {
+    const auto eol = DocumentEol(scintilla);
+    std::string text;
+    for (const auto& line : lines) {
+        text += line;
+        text += eol;
+    }
+    const auto caret = static_cast<ptrdiff_t>(::SendMessage(scintilla, nmf::npp::SCI_GETCURRENTPOS, 0, 0));
+    const int caretLine = static_cast<int>(::SendMessage(scintilla, nmf::npp::SCI_LINEFROMPOSITION, caret, 0));
+    ::SendMessage(scintilla, nmf::npp::SCI_BEGINUNDOACTION, 0, 0);
+    const auto length = static_cast<ptrdiff_t>(::SendMessage(scintilla, nmf::npp::SCI_GETLENGTH, 0, 0));
+    nmf::npp::ScintillaReplaceRange(scintilla, 0, length, text);
+    ::SendMessage(scintilla, nmf::npp::SCI_ENDUNDOACTION, 0, 0);
+    const int newCount = static_cast<int>(::SendMessage(scintilla, nmf::npp::SCI_GETLINECOUNT, 0, 0));
+    ::SendMessage(scintilla, nmf::npp::SCI_GOTOLINE, std::min(caretLine, newCount - 1), 0);
+}
+
+void InsertUpdateTocCommand() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (!ActiveDocumentIsMarkdown(document)) {
+        return;
+    }
+    const auto lines = ReadAllLines(document.scintilla);
+    const auto caret = static_cast<ptrdiff_t>(::SendMessage(document.scintilla, nmf::npp::SCI_GETCURRENTPOS, 0, 0));
+    const int caretLine = static_cast<int>(::SendMessage(document.scintilla, nmf::npp::SCI_LINEFROMPOSITION, caret, 0));
+    bool changed = false;
+    const auto updated = nmf::UpdateToc(lines, caretLine, changed);
+    if (changed) {
+        ReplaceWholeDocument(document.scintilla, updated);
+        nmf::npp::SetStatus(g_nppData._nppHandle, L"Markdown Features: table of contents updated");
+    } else {
+        nmf::npp::SetStatus(g_nppData._nppHandle, L"Markdown Features: table of contents already up to date");
+    }
+}
+
+void FormatDocumentCommand() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (!ActiveDocumentIsMarkdown(document)) {
+        return;
+    }
+    const auto lines = ReadAllLines(document.scintilla);
+    const auto cleaned = nmf::CleanupDocumentLines(lines, nmf::CleanupOptions{});
+    // ReadAllLines yields a trailing empty entry when the file ends with an
+    // EOL; compare against the cleaned shape to detect real changes.
+    auto normalizedInput = lines;
+    while (!normalizedInput.empty() && normalizedInput.back().empty()) {
+        normalizedInput.pop_back();
+    }
+    if (cleaned == normalizedInput) {
+        nmf::npp::SetStatus(g_nppData._nppHandle, L"Markdown Features: document already clean");
+        return;
+    }
+    ReplaceWholeDocument(document.scintilla, cleaned);
+    nmf::npp::SetStatus(g_nppData._nppHandle, L"Markdown Features: document formatted");
+}
+
 void ExportHtmlCommand() {
     EnsureInitialized();
     const auto document = ActiveDocument();
@@ -547,6 +630,8 @@ void RegisterCommands() {
     SetCommand(kExportHtmlIndex, L"Export HTML...", ExportHtmlCommand);
     SetCommand(kCopyHtmlIndex, L"Copy as HTML", CopyAsHtmlCommand);
     SetCommand(kPrintIndex, L"Print Rendered View...", PrintRenderedCommand);
+    SetCommand(kFormatDocumentIndex, L"Format Document", FormatDocumentCommand);
+    SetCommand(kTocIndex, L"Insert/Update TOC", InsertUpdateTocCommand);
     registered = true;
 }
 
@@ -626,6 +711,9 @@ void ReorganizeMenu() {
     ::AppendMenu(ourMenu, MF_SEPARATOR, 0, nullptr);
 
     HMENU formatMenu = ::CreatePopupMenu();
+    append(formatMenu, kFormatDocumentIndex);
+    append(formatMenu, kTocIndex);
+    ::AppendMenu(formatMenu, MF_SEPARATOR, 0, nullptr);
     append(formatMenu, kBoldIndex);
     append(formatMenu, kItalicIndex);
     append(formatMenu, kStrikethroughIndex);

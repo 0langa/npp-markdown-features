@@ -4,6 +4,7 @@
 #include "core/ListEditing.h"
 #include "core/MarkdownViewFeature.h"
 #include "core/TableEditing.h"
+#include "core/TocGenerator.h"
 #include "core/ScrollSync.h"
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
@@ -470,6 +471,98 @@ void TestHtmlExport() {
     assert(payload.find("<!--StartFragment-->") + strlen("<!--StartFragment-->") == startFragment);
 }
 
+void TestTocGeneration() {
+    const std::vector<std::string> doc{
+        "# Title",
+        "",
+        "## Alpha",
+        "",
+        "### Sub",
+        "",
+        "## Alpha",
+        "",
+    };
+    const auto toc = nmf::BuildTocLines(doc);
+    assert(toc.size() == 3);
+    assert(toc[0] == "- [Alpha](#alpha)");
+    assert(toc[1] == "  - [Sub](#sub)");
+    assert(toc[2] == "- [Alpha](#alpha-1)");  // GitHub duplicate suffix
+
+    bool changed = false;
+    const auto inserted = nmf::UpdateToc(doc, 2, changed);
+    assert(changed);
+    assert(inserted[2] == nmf::kTocStartMarker);
+    assert(inserted[3] == "- [Alpha](#alpha)");
+    assert(inserted[6] == nmf::kTocEndMarker);
+
+    // Second update on the result is idempotent.
+    bool changedAgain = true;
+    const auto updated = nmf::UpdateToc(inserted, 0, changedAgain);
+    assert(!changedAgain);
+    assert(updated == inserted);
+}
+
+void TestDocumentCleanup() {
+    const std::vector<std::string> input{
+        "# Title   ",
+        "line with break  ",
+        "* star item",
+        "+ plus item",
+        "  * nested star",
+        "",
+        "",
+        "",
+        "## Next",
+        "text",
+        "```",
+        "code   * keep",
+        "```",
+        "| a | b |",
+        "| - | - |",
+        "| 1 | 2 |",
+        "",
+        "",
+    };
+    const auto cleaned = nmf::CleanupDocumentLines(input, nmf::CleanupOptions{});
+
+    assert(cleaned[0] == "# Title");                    // trailing ws gone
+    // hard break (two spaces) preserved
+    bool foundBreak = false;
+    bool foundStar = false;
+    for (const auto& line : cleaned) {
+        if (line == "line with break  ") {
+            foundBreak = true;
+        }
+        if (line == "code   * keep") {
+            foundStar = true;  // fenced content untouched
+        }
+        assert(line != "* star item");
+        assert(line != "+ plus item");
+    }
+    assert(foundBreak);
+    assert(foundStar);
+
+    // bullets normalized
+    assert(std::find(cleaned.begin(), cleaned.end(), "- star item") != cleaned.end());
+    assert(std::find(cleaned.begin(), cleaned.end(), "- plus item") != cleaned.end());
+    assert(std::find(cleaned.begin(), cleaned.end(), "  - nested star") != cleaned.end());
+
+    // triple blank collapsed to one, blank inserted around headings
+    for (size_t index = 1; index < cleaned.size(); ++index) {
+        assert(!(cleaned[index].empty() && cleaned[index - 1].empty()));
+    }
+    const auto next = std::find(cleaned.begin(), cleaned.end(), "## Next");
+    assert(next != cleaned.end());
+    assert((next - 1)->empty());
+    assert((next + 1)->empty());
+
+    // table formatted
+    assert(std::find(cleaned.begin(), cleaned.end(), "| a   | b   |") != cleaned.end());
+
+    // no trailing blank lines
+    assert(!cleaned.empty() && !cleaned.back().empty());
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -501,6 +594,8 @@ int main() {
     TestLinkParsing();
     TestLinkClassification();
     TestHtmlExport();
+    TestTocGeneration();
+    TestDocumentCleanup();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;

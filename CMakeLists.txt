@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(NppMarkdownFeatures VERSION 0.7.0 LANGUAGES C CXX)
+project(NppMarkdownFeatures VERSION 0.8.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,6 +66,7 @@ add_library(nmf_core
   src/core/LinkTools.cpp
   src/core/ListEditing.cpp
   src/core/TableEditing.cpp
+  src/core/TocGenerator.cpp
   src/core/MarkdownOutline.cpp
   src/core/MarkdownViewFeature.cpp
   src/core/ScrollSync.cpp
