@@ -3,6 +3,7 @@
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
 #include "plugin/FormattingController.h"
+#include "plugin/LinkController.h"
 #include "plugin/ListEditingController.h"
 #include "plugin/NppApi.h"
 #include "plugin/TableEditingController.h"
@@ -23,7 +24,7 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 18;
+constexpr int kCommandCount = 22;
 constexpr int kToggleIndex = 0;
 constexpr int kOutlineIndex = 1;
 constexpr int kCheckboxIndex = 2;
@@ -42,6 +43,10 @@ constexpr int kHeadingUpIndex = 14;
 constexpr int kHeadingDownIndex = 15;
 constexpr int kBlockquoteIndex = 16;
 constexpr int kCodeFenceIndex = 17;
+constexpr int kInsertLinkIndex = 18;
+constexpr int kInsertImageIndex = 19;
+constexpr int kFollowLinkIndex = 20;
+constexpr int kCheckLinksIndex = 21;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -54,6 +59,7 @@ nmf::OutlinePanel g_outlinePanel;
 nmf::ListEditingController g_listEditing;
 nmf::TableEditingController g_tableEditing;
 nmf::FormattingController g_formatting;
+nmf::LinkController g_links;
 UINT_PTR g_outlineTimer = 0;
 HICON g_lightIcon = nullptr;
 HICON g_darkIcon = nullptr;
@@ -147,18 +153,25 @@ void ScheduleOutlineUpdate() {
 LRESULT CALLBACK ScintillaSubclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
     if (message == WM_KEYDOWN) {
         if (wParam == VK_TAB && g_initialized && g_tableEditing.SmartTabEnabled()) {
-            const bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            const bool alt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
+            const bool ctrl = (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            const bool alt = (::GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
             if (!ctrl && !alt) {
                 const auto document = ActiveDocument();
                 if (document.scintilla == hwnd && ActiveDocumentIsMarkdown(document)) {
-                    const bool backward = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                    const bool backward = (::GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
                     if (g_tableEditing.NavigateCell(hwnd, !backward)) {
                         // The already-translated WM_CHAR '\t' still arrives; drop it.
                         g_swallowNextTabChar = true;
                         return 0;
                     }
                 }
+            }
+        }
+        if (wParam == 'V' && g_initialized && (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+            && (::GetAsyncKeyState(VK_MENU) & 0x8000) == 0 && (::GetAsyncKeyState(VK_SHIFT) & 0x8000) == 0) {
+            const auto document = ActiveDocument();
+            if (document.scintilla == hwnd && ActiveDocumentIsMarkdown(document) && g_links.HandlePaste(hwnd)) {
+                return 0;
             }
         }
         if (wParam != VK_TAB) {
@@ -264,6 +277,7 @@ void EnsureInitialized() {
     EnsureScintillaSubclassed();
     g_listEditing.SetSmartEnterEnabled(g_settings.listEditing.smartEnter);
     g_tableEditing.SetSmartTabEnabled(g_settings.tableEditing.smartTab);
+    g_links.SetPasteUrlEnabled(g_settings.linkTools.pasteUrlAsLink);
     nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartTypingIndex]._cmdID, g_settings.listEditing.smartEnter);
 
     g_initialized = true;
@@ -314,8 +328,10 @@ void ToggleSmartTyping() {
     const bool enabled = !g_listEditing.SmartEnterEnabled();
     g_listEditing.SetSmartEnterEnabled(enabled);
     g_tableEditing.SetSmartTabEnabled(enabled);
+    g_links.SetPasteUrlEnabled(enabled);
     g_settings.listEditing.smartEnter = enabled;
     g_settings.tableEditing.smartTab = enabled;
+    g_settings.linkTools.pasteUrlAsLink = enabled;
     nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartTypingIndex]._cmdID, enabled);
     SaveSettings();
 }
@@ -392,6 +408,40 @@ void InsertCodeFenceCommand() {
     WithMarkdownDocument([](HWND scintilla) { g_formatting.InsertCodeFence(scintilla); });
 }
 
+void InsertLinkCommand() {
+    WithMarkdownDocument([](HWND scintilla) { g_links.InsertLink(scintilla, false); });
+}
+
+void InsertImageCommand() {
+    WithMarkdownDocument([](HWND scintilla) { g_links.InsertLink(scintilla, true); });
+}
+
+void FollowLinkCommand() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        const auto status = g_links.FollowLink(document.scintilla, g_nppData._nppHandle, document.path);
+        nmf::npp::SetStatus(g_nppData._nppHandle, status);
+    }
+}
+
+void CheckLinksCommand() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (!ActiveDocumentIsMarkdown(document)) {
+        return;
+    }
+    const auto result = g_links.CheckLinks(document.scintilla, document.path);
+    if (!result.reportUtf8.empty()) {
+        ::SendMessage(g_nppData._nppHandle, WM_COMMAND, nmf::npp::IDM_FILE_NEW, 0);
+        const auto reportDocument = ActiveDocument();
+        if (reportDocument.scintilla != nullptr) {
+            ::SendMessage(reportDocument.scintilla, nmf::npp::SCI_SETTEXT, 0, reinterpret_cast<LPARAM>(result.reportUtf8.c_str()));
+        }
+    }
+    nmf::npp::SetStatus(g_nppData._nppHandle, result.status);
+}
+
 void OpenSettings() {
     EnsureInitialized();
     if (g_markdownFeature == nullptr || g_settingsStore == nullptr) {
@@ -447,6 +497,12 @@ void RegisterCommands() {
     SetCommand(kHeadingDownIndex, L"Heading Level Down", HeadingLevelDown);
     SetCommand(kBlockquoteIndex, L"Toggle Blockquote", ToggleBlockquoteCommand, &blockquoteShortcut);
     SetCommand(kCodeFenceIndex, L"Insert Code Fence", InsertCodeFenceCommand, &codeFenceShortcut);
+    static nmf::npp::ShortcutKey insertLinkShortcut{true, true, false, 'L'};
+    static nmf::npp::ShortcutKey followLinkShortcut{true, true, false, 'G'};
+    SetCommand(kInsertLinkIndex, L"Insert Link", InsertLinkCommand, &insertLinkShortcut);
+    SetCommand(kInsertImageIndex, L"Insert Image", InsertImageCommand);
+    SetCommand(kFollowLinkIndex, L"Follow Link", FollowLinkCommand, &followLinkShortcut);
+    SetCommand(kCheckLinksIndex, L"Check Links", CheckLinksCommand);
     registered = true;
 }
 
@@ -549,6 +605,14 @@ void ReorganizeMenu() {
     append(tableMenu, kDeleteColumnIndex);
     append(tableMenu, kCycleAlignmentIndex);
     ::AppendMenu(ourMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(tableMenu), L"Table");
+
+    HMENU linksMenu = ::CreatePopupMenu();
+    append(linksMenu, kInsertLinkIndex);
+    append(linksMenu, kInsertImageIndex);
+    ::AppendMenu(linksMenu, MF_SEPARATOR, 0, nullptr);
+    append(linksMenu, kFollowLinkIndex);
+    append(linksMenu, kCheckLinksIndex);
+    ::AppendMenu(ourMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(linksMenu), L"Links");
 
     ::AppendMenu(ourMenu, MF_SEPARATOR, 0, nullptr);
     append(ourMenu, kSmartTypingIndex);

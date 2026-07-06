@@ -36,7 +36,7 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.5.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.6.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
@@ -60,6 +60,11 @@ Version `0.5.0` builds a native x64 Notepad++ plugin DLL with:
   - Heading Level Up / Down for the current line or all selected lines
   - Toggle Blockquote (`Ctrl+Alt+Q`) adds/removes one `> ` level across the selection
   - Insert Code Fence (`Ctrl+Alt+F`) wraps the selected lines in ``` fences or inserts an empty block, caret on the language position
+- **Link & image tooling** (`Markdown Features > Links`):
+  - paste a URL over selected text (`Ctrl+V`) and it becomes `[selection](url)` automatically (part of Smart Typing)
+  - Insert Link (`Ctrl+Alt+L`) / Insert Image scaffolds with the caret in the right slot
+  - Follow Link (`Ctrl+Alt+G`): opens `https://` links in the browser, `#anchors` jump to the matching heading, relative file links open in Notepad++ (with `%20` decoding and `[ref][id]` resolution)
+  - Check Links: validates every local file link and heading anchor in the document and opens a report listing broken ones (external URLs are counted but not fetched)
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

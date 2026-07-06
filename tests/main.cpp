@@ -1,4 +1,5 @@
 #include "core/InlineFormatting.h"
+#include "core/LinkTools.h"
 #include "core/ListEditing.h"
 #include "core/MarkdownViewFeature.h"
 #include "core/TableEditing.h"
@@ -399,6 +400,53 @@ void TestInlineFormattingHelpers() {
     assert(nested[0] == "deep");
 }
 
+void TestLinkParsing() {
+    const std::string line = "See [docs](./docs/notes.md#setup \"Title\") and <https://a.example> or https://b.example/x. End";
+
+    const auto links = nmf::LinksOnLine(line);
+    assert(links.size() == 3);
+    assert(links[0].text == "docs");
+    assert(links[0].target == "./docs/notes.md#setup");
+    assert(links[1].target == "https://a.example");
+    assert(links[2].target == "https://b.example/x");  // trailing period trimmed
+
+    const auto atText = nmf::LinkAtPosition(line, 6);
+    assert(atText && atText->text == "docs");
+    assert(!nmf::LinkAtPosition("plain words", 3));
+
+    const auto image = nmf::LinksOnLine("![alt](img/pic.png)");
+    assert(image.size() == 1 && image[0].isImage && image[0].target == "img/pic.png");
+
+    const auto reference = nmf::LinksOnLine("Use [guide][setup] here");
+    assert(reference.size() == 1 && reference[0].reference == "setup");
+    const auto collapsed = nmf::LinksOnLine("Use [setup][] here");
+    assert(collapsed.size() == 1 && collapsed[0].reference == "setup");
+
+    const std::vector<std::string> doc{"text", "[setup]: https://example.com/setup", "more"};
+    const auto resolved = nmf::ResolveReference(doc, "SETUP");
+    assert(resolved && *resolved == "https://example.com/setup");
+    assert(!nmf::ResolveReference(doc, "missing"));
+
+    const auto parens = nmf::LinksOnLine("[wiki](https://x.example/A_(b))");
+    assert(parens.size() == 1 && parens[0].target == "https://x.example/A_(b)");
+}
+
+void TestLinkClassification() {
+    assert(nmf::ClassifyLinkTarget("https://example.com") == nmf::LinkKind::External);
+    assert(nmf::ClassifyLinkTarget("mailto:x@example.com") == nmf::LinkKind::External);
+    assert(nmf::ClassifyLinkTarget("#section-one") == nmf::LinkKind::Anchor);
+    assert(nmf::ClassifyLinkTarget("docs/readme.md") == nmf::LinkKind::LocalFile);
+    assert(nmf::ClassifyLinkTarget("..\\up.md") == nmf::LinkKind::LocalFile);
+
+    const auto split = nmf::SplitLocalTarget("my%20file.md#the-part");
+    assert(split.path == "my file.md");
+    assert(split.fragment == "the-part");
+
+    assert(nmf::GithubSlug("Hello World!") == "hello-world");
+    assert(nmf::GithubSlug("Setup & Config") == "setup--config");
+    assert(nmf::GithubSlug("under_score") == "under_score");
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -427,6 +475,8 @@ int main() {
     TestTableColumnOps();
     TestTableCellGeometry();
     TestInlineFormattingHelpers();
+    TestLinkParsing();
+    TestLinkClassification();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;

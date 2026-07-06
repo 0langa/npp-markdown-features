@@ -39,6 +39,9 @@ nlohmann::json ToJson(const AppSettings& settings) {
         {"tableEditing", {
             {"smartTab", settings.tableEditing.smartTab},
         }},
+        {"linkTools", {
+            {"pasteUrlAsLink", settings.linkTools.pasteUrlAsLink},
+        }},
     };
 }
 
@@ -77,6 +80,9 @@ AppSettings FromJson(const nlohmann::json& json) {
 
     const auto tableEditing = json.value("tableEditing", nlohmann::json::object());
     settings.tableEditing.smartTab = tableEditing.value("smartTab", true);
+
+    const auto linkTools = json.value("linkTools", nlohmann::json::object());
+    settings.linkTools.pasteUrlAsLink = linkTools.value("pasteUrlAsLink", true);
     return settings;
 }
 

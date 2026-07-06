@@ -29,12 +29,17 @@ struct TableEditingSettings {
     bool smartTab{true};
 };
 
+struct LinkToolsSettings {
+    bool pasteUrlAsLink{true};
+};
+
 struct AppSettings {
     int schemaVersion{1};
     MarkdownViewSettings markdownView{};
     OutlineSettings outline{};
     ListEditingSettings listEditing{};
     TableEditingSettings tableEditing{};
+    LinkToolsSettings linkTools{};
 };
 
 std::wstring ToString(DisplayMode mode);
