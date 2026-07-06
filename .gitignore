@@ -35,3 +35,6 @@ compile_commands.json
 
 # Logs
 *.log
+
+.recall/
+.codex_memory/
