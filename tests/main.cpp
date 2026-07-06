@@ -1,3 +1,4 @@
+#include "core/ListEditing.h"
 #include "core/MarkdownViewFeature.h"
 #include "core/ScrollSync.h"
 #include "core/SettingsStore.h"
@@ -168,6 +169,118 @@ void TestFeatureToggle() {
     assert(hidden);
 }
 
+void TestListItemParsing() {
+    auto bullet = nmf::ParseListItem("  - item text");
+    assert(bullet && !bullet->isOrdered && !bullet->isTask && !bullet->isQuote);
+    assert(bullet->indent == "  ");
+    assert(bullet->bulletChar == '-');
+    assert(bullet->content == "item text");
+
+    auto ordered = nmf::ParseListItem("12) content");
+    assert(ordered && ordered->isOrdered);
+    assert(ordered->orderedNumber == 12);
+    assert(ordered->orderedDelimiter == ')');
+
+    auto task = nmf::ParseListItem("* [x] done");
+    assert(task && task->isTask && task->taskChecked);
+    assert(task->bulletChar == '*');
+    assert(task->content == "done");
+
+    auto quote = nmf::ParseListItem("> quoted");
+    assert(quote && quote->isQuote);
+    assert(quote->quotePrefix == "> ");
+    assert(quote->content == "quoted");
+
+    auto nestedQuote = nmf::ParseListItem("> > deep");
+    assert(nestedQuote && nestedQuote->quotePrefix == "> > ");
+
+    assert(!nmf::ParseListItem("plain text"));
+    assert(!nmf::ParseListItem("-not a list"));
+    assert(!nmf::ParseListItem("1.also not"));
+    assert(!nmf::ParseListItem(""));
+    // "[x]" without trailing space boundary is content, not a task box.
+    auto notTask = nmf::ParseListItem("- [x]y");
+    assert(notTask && !notTask->isTask);
+}
+
+void TestListContinuation() {
+    auto bullet = nmf::ContinuationForLine("- item");
+    assert(bullet && !bullet->terminate && bullet->prefix == "- ");
+
+    auto nested = nmf::ContinuationForLine("    * sub");
+    assert(nested && nested->prefix == "    * ");
+
+    auto ordered = nmf::ContinuationForLine("3. step");
+    assert(ordered && ordered->prefix == "4. ");
+
+    auto padded = nmf::ContinuationForLine("09. step");
+    assert(padded && padded->prefix == "10. ");
+    auto padded2 = nmf::ContinuationForLine("01. step");
+    assert(padded2 && padded2->prefix == "02. ");
+
+    auto paren = nmf::ContinuationForLine("1) step");
+    assert(paren && paren->prefix == "2) ");
+
+    auto task = nmf::ContinuationForLine("- [x] done");
+    assert(task && task->prefix == "- [ ] ");
+
+    auto quote = nmf::ContinuationForLine("> words");
+    assert(quote && quote->prefix == "> ");
+
+    auto emptyItem = nmf::ContinuationForLine("- ");
+    assert(emptyItem && emptyItem->terminate);
+    auto emptyTask = nmf::ContinuationForLine("- [ ] ");
+    assert(emptyTask && emptyTask->terminate);
+    auto emptyQuote = nmf::ContinuationForLine("> ");
+    assert(emptyQuote && emptyQuote->terminate);
+
+    assert(!nmf::ContinuationForLine("plain paragraph"));
+    assert(!nmf::ContinuationForLine(""));
+}
+
+void TestToggleTaskCheckbox() {
+    assert(nmf::ToggleTaskCheckbox("- [ ] todo") == "- [x] todo");
+    assert(nmf::ToggleTaskCheckbox("- [x] done") == "- [ ] done");
+    assert(nmf::ToggleTaskCheckbox("- [X] DONE") == "- [ ] DONE");
+    assert(nmf::ToggleTaskCheckbox("  1. [ ] ordered") == "  1. [x] ordered");
+    assert(nmf::ToggleTaskCheckbox("- plain item") == "- [ ] plain item");
+    assert(nmf::ToggleTaskCheckbox("  plain text") == "  - [ ] plain text");
+    assert(nmf::ToggleTaskCheckbox("") == "- [ ] ");
+}
+
+void TestRenumberListBlock() {
+    const std::vector<std::string> input{
+        "1. one",
+        "5. two",
+        "2. three",
+        "   1. nested a",
+        "   7. nested b",
+        "9. four",
+    };
+    const auto result = nmf::RenumberListBlock(input);
+    assert(result[0] == "1. one");
+    assert(result[1] == "2. two");
+    assert(result[2] == "3. three");
+    assert(result[3] == "   1. nested a");
+    assert(result[4] == "   2. nested b");
+    assert(result[5] == "4. four");
+
+    // Starting number is preserved; padding respected.
+    const auto offset = nmf::RenumberListBlock({"4. a", "9. b"});
+    assert(offset[0] == "4. a");
+    assert(offset[1] == "5. b");
+    const auto padded = nmf::RenumberListBlock({"01. a", "07. b"});
+    assert(padded[0] == "01. a");
+    assert(padded[1] == "02. b");
+
+    // Mixed content and tasks survive.
+    const auto mixed = nmf::RenumberListBlock({"1. [x] done", "4. [ ] todo", "- bullet", "3. restart"});
+    assert(mixed[0] == "1. [x] done");
+    assert(mixed[1] == "2. [ ] todo");
+    assert(mixed[2] == "- bullet");
+    assert(mixed[3] == "3. restart");
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -188,6 +301,10 @@ int main() {
     TestHtmlEscape();
     TestBlockScrollSync();
     TestFeatureToggle();
+    TestListItemParsing();
+    TestListContinuation();
+    TestToggleTaskCheckbox();
+    TestRenumberListBlock();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;

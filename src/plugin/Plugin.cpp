@@ -2,6 +2,7 @@
 #include "core/MarkdownViewFeature.h"
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
+#include "plugin/ListEditingController.h"
 #include "plugin/NppApi.h"
 #include "rendering/WebViewHost.h"
 #include "ui/OutlinePanel.h"
@@ -18,10 +19,13 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 3;
+constexpr int kCommandCount = 6;
 constexpr int kToggleIndex = 0;
 constexpr int kOutlineIndex = 1;
-constexpr int kSettingsIndex = 2;
+constexpr int kCheckboxIndex = 2;
+constexpr int kRenumberIndex = 3;
+constexpr int kSmartEnterIndex = 4;
+constexpr int kSettingsIndex = 5;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -31,6 +35,7 @@ nmf::FeatureRegistry g_features;
 nmf::MarkdownViewFeature* g_markdownFeature = nullptr;
 nmf::WebViewHost g_webView;
 nmf::OutlinePanel g_outlinePanel;
+nmf::ListEditingController g_listEditing;
 UINT_PTR g_outlineTimer = 0;
 HICON g_lightIcon = nullptr;
 HICON g_darkIcon = nullptr;
@@ -176,6 +181,9 @@ void EnsureInitialized() {
         SaveSettings();
     });
 
+    g_listEditing.SetSmartEnterEnabled(g_settings.listEditing.smartEnter);
+    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartEnterIndex]._cmdID, g_settings.listEditing.smartEnter);
+
     g_initialized = true;
     g_features.NotifyDocumentChanged(ActiveDocument());
     UpdateToggleCheck();
@@ -201,6 +209,31 @@ void ToggleOutlinePanel() {
         g_outlinePanel.Show();
         UpdateOutlineNow();
     }
+}
+
+void ToggleTaskCheckbox() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        g_listEditing.ToggleCheckbox(document.scintilla);
+    }
+}
+
+void RenumberList() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        g_listEditing.RenumberAtCaret(document.scintilla);
+    }
+}
+
+void ToggleSmartListEditing() {
+    EnsureInitialized();
+    const bool enabled = !g_listEditing.SmartEnterEnabled();
+    g_listEditing.SetSmartEnterEnabled(enabled);
+    g_settings.listEditing.smartEnter = enabled;
+    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartEnterIndex]._cmdID, enabled);
+    SaveSettings();
 }
 
 void OpenSettings() {
@@ -232,8 +265,12 @@ void RegisterCommands() {
     }
     static nmf::npp::ShortcutKey toggleShortcut{true, false, true, 'M'};
     static nmf::npp::ShortcutKey outlineShortcut{true, false, true, 'O'};
+    static nmf::npp::ShortcutKey checkboxShortcut{true, false, true, 'X'};
     SetCommand(kToggleIndex, L"Toggle Rendered View", ToggleRenderedView, &toggleShortcut);
     SetCommand(kOutlineIndex, L"Document Outline", ToggleOutlinePanel, &outlineShortcut);
+    SetCommand(kCheckboxIndex, L"Toggle Task Checkbox", ToggleTaskCheckbox, &checkboxShortcut);
+    SetCommand(kRenumberIndex, L"Renumber List", RenumberList);
+    SetCommand(kSmartEnterIndex, L"Smart List Editing", ToggleSmartListEditing, nullptr, true);
     SetCommand(kSettingsIndex, L"Settings...", OpenSettings);
     registered = true;
 }
@@ -347,6 +384,15 @@ extern "C" __declspec(dllexport) void beNotified(nmf::npp::SCNotification* notif
             if ((notifyCode->nmhdr.hwndFrom == g_nppData._scintillaMainHandle || notifyCode->nmhdr.hwndFrom == g_nppData._scintillaSecondHandle)
                 && (notifyCode->modificationType & (nmf::npp::SC_MOD_INSERTTEXT | nmf::npp::SC_MOD_DELETETEXT)) != 0) {
                 ScheduleOutlineUpdate();
+            }
+            break;
+        case nmf::npp::SCN_CHARADDED:
+            if (g_initialized
+                && (notifyCode->nmhdr.hwndFrom == g_nppData._scintillaMainHandle || notifyCode->nmhdr.hwndFrom == g_nppData._scintillaSecondHandle)) {
+                const auto document = ActiveDocument();
+                if (ActiveDocumentIsMarkdown(document) && document.scintilla == notifyCode->nmhdr.hwndFrom) {
+                    g_listEditing.OnCharAdded(document.scintilla, notifyCode->ch);
+                }
             }
             break;
         default:

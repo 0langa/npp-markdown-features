@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(NppMarkdownFeatures VERSION 0.2.0 LANGUAGES C CXX)
+project(NppMarkdownFeatures VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,7 @@ set_target_properties(WebView2LoaderStatic PROPERTIES IMPORTED_LOCATION "${WEBVI
 
 add_library(nmf_core
   src/core/FeatureRegistry.cpp
+  src/core/ListEditing.cpp
   src/core/MarkdownOutline.cpp
   src/core/MarkdownViewFeature.cpp
   src/core/ScrollSync.cpp
@@ -85,6 +86,7 @@ target_compile_definitions(nmf_core PUBLIC
 
 add_library(NppMarkdownFeatures SHARED
   src/plugin/Plugin.cpp
+  src/plugin/ListEditingController.cpp
   src/plugin/NppApi.cpp
   src/rendering/WebViewHost.cpp
   src/ui/AboutDialog.cpp

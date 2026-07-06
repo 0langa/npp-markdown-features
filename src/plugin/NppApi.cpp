@@ -112,4 +112,30 @@ void SetScintillaFirstVisibleLine(HWND scintilla, int line) {
     ::SendMessage(scintilla, SCI_LINESCROLL, 0, displayLine - current);
 }
 
+std::string ScintillaLineText(HWND scintilla, int line) {
+    if (scintilla == nullptr || line < 0) {
+        return {};
+    }
+    const auto length = static_cast<size_t>(::SendMessage(scintilla, SCI_LINELENGTH, line, 0));
+    if (length == 0) {
+        return {};
+    }
+    std::string buffer(length + 1, '\0');
+    ::SendMessage(scintilla, SCI_GETLINE, line, reinterpret_cast<LPARAM>(buffer.data()));
+    buffer.resize(length);
+    while (!buffer.empty() && (buffer.back() == '\n' || buffer.back() == '\r')) {
+        buffer.pop_back();
+    }
+    return buffer;
+}
+
+void ScintillaReplaceRange(HWND scintilla, ptrdiff_t start, ptrdiff_t end, const std::string& text) {
+    if (scintilla == nullptr || start < 0 || end < start) {
+        return;
+    }
+    ::SendMessage(scintilla, SCI_SETTARGETSTART, static_cast<WPARAM>(start), 0);
+    ::SendMessage(scintilla, SCI_SETTARGETEND, static_cast<WPARAM>(end), 0);
+    ::SendMessage(scintilla, SCI_REPLACETARGET, text.size(), reinterpret_cast<LPARAM>(text.c_str()));
+}
+
 }  // namespace nmf::npp

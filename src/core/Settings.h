@@ -21,10 +21,15 @@ struct OutlineSettings {
     bool visible{false};
 };
 
+struct ListEditingSettings {
+    bool smartEnter{true};
+};
+
 struct AppSettings {
     int schemaVersion{1};
     MarkdownViewSettings markdownView{};
     OutlineSettings outline{};
+    ListEditingSettings listEditing{};
 };
 
 std::wstring ToString(DisplayMode mode);

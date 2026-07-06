@@ -73,8 +73,27 @@ constexpr UINT SCI_ENSUREVISIBLE = 2232;
 constexpr int SC_CP_UTF8 = 65001;
 
 constexpr UINT SCN_MODIFIED = 2008;
+constexpr UINT SCN_CHARADDED = 2001;
 constexpr int SC_MOD_INSERTTEXT = 0x1;
 constexpr int SC_MOD_DELETETEXT = 0x2;
+
+constexpr UINT SCI_GETCURRENTPOS = 2008;
+constexpr UINT SCI_GOTOPOS = 2025;
+constexpr UINT SCI_GETEOLMODE = 2030;
+constexpr UINT SCI_BEGINUNDOACTION = 2078;
+constexpr UINT SCI_ENDUNDOACTION = 2079;
+constexpr UINT SCI_GETLINEENDPOSITION = 2136;
+constexpr UINT SCI_GETSELECTIONSTART = 2143;
+constexpr UINT SCI_GETSELECTIONEND = 2145;
+constexpr UINT SCI_GETLINE = 2153;
+constexpr UINT SCI_LINEFROMPOSITION = 2166;
+constexpr UINT SCI_POSITIONFROMLINE = 2167;
+constexpr UINT SCI_SETTARGETSTART = 2190;
+constexpr UINT SCI_SETTARGETEND = 2192;
+constexpr UINT SCI_REPLACETARGET = 2194;
+constexpr UINT SCI_LINELENGTH = 2350;
+constexpr UINT SCI_GETSELECTIONS = 2570;
+constexpr int SC_EOL_CRLF = 0;
 
 constexpr int STATUSBAR_TYPING_MODE = 5;
 
@@ -147,5 +166,7 @@ int ScintillaFirstVisibleLine(HWND scintilla);
 double ScintillaViewportRatio(HWND scintilla);
 void SetScintillaViewportRatio(HWND scintilla, double ratio);
 void SetScintillaFirstVisibleLine(HWND scintilla, int line);
+std::string ScintillaLineText(HWND scintilla, int line);
+void ScintillaReplaceRange(HWND scintilla, ptrdiff_t start, ptrdiff_t end, const std::string& text);
 
 }  // namespace nmf::npp

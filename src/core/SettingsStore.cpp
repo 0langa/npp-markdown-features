@@ -33,6 +33,9 @@ nlohmann::json ToJson(const AppSettings& settings) {
         {"outline", {
             {"visible", settings.outline.visible},
         }},
+        {"listEditing", {
+            {"smartEnter", settings.listEditing.smartEnter},
+        }},
     };
 }
 
@@ -65,6 +68,9 @@ AppSettings FromJson(const nlohmann::json& json) {
 
     const auto outline = json.value("outline", nlohmann::json::object());
     settings.outline.visible = outline.value("visible", false);
+
+    const auto listEditing = json.value("listEditing", nlohmann::json::object());
+    settings.listEditing.smartEnter = listEditing.value("smartEnter", true);
     return settings;
 }
 

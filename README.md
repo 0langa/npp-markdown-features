@@ -36,7 +36,7 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.2.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.3.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
@@ -44,6 +44,11 @@ Version `0.2.0` builds a native x64 Notepad++ plugin DLL with:
 - block-level scroll sync: toggling raw/rendered keeps your reading position both ways, using `data-sourcepos` source mapping with heading-anchor and ratio fallbacks
 - word-wrap-aware scroll mapping in the raw editor
 - **Document Outline** panel (`Ctrl+Shift+O`): docked heading tree with live updates while typing, filter box, and click-to-jump that also scrolls the rendered view; panel visibility persists across restarts; ATX and setext headings supported
+- **Smart list editing** (toggleable via `Plugins > Markdown Features > Smart List Editing`):
+  - Enter continues bullet lists (`-`, `*`, `+`), ordered lists (`1.`, `1)`, zero-padded numbers), task lists, and blockquotes — indentation preserved, remainder of a split line carried over
+  - Enter on an empty item removes the marker and ends the list
+  - ordered lists renumber automatically when items are inserted; `Renumber List` fixes any block on demand (nesting-aware, keeps the starting number)
+  - `Toggle Task Checkbox` (`Ctrl+Shift+X`): checks/unchecks tasks, adds boxes to plain list items, converts plain lines or selections into task items
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests
