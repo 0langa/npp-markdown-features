@@ -36,7 +36,7 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.4.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.5.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
@@ -55,6 +55,11 @@ Version `0.4.0` builds a native x64 Notepad++ plugin DLL with:
   - `Table: Insert Column` / `Table: Delete Column` at the caret position
   - `Table: Cycle Column Alignment` steps the current column through none → left → center → right
   - smart Tab is part of the `Smart Typing (Lists, Tables)` toggle
+- **Formatting commands** (under `Markdown Features > Format`; the plugin menu is organized into `Format` / `Lists` / `Table` submenus):
+  - Bold (`Ctrl+Alt+B`), Italic (`Ctrl+Alt+I`), Strikethrough (`Ctrl+Alt+U`), Inline Code (`Ctrl+Alt+C`) — toggle on the selection or the word at the caret, unwrap when already wrapped, bold/italic edges disambiguated
+  - Heading Level Up / Down for the current line or all selected lines
+  - Toggle Blockquote (`Ctrl+Alt+Q`) adds/removes one `> ` level across the selection
+  - Insert Code Fence (`Ctrl+Alt+F`) wraps the selected lines in ``` fences or inserts an empty block, caret on the language position
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

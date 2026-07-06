@@ -1,3 +1,4 @@
+#include "core/InlineFormatting.h"
 #include "core/ListEditing.h"
 #include "core/MarkdownViewFeature.h"
 #include "core/TableEditing.h"
@@ -368,6 +369,36 @@ void TestTableCellGeometry() {
     assert(!nmf::IsTableLine("plain"));
 }
 
+void TestInlineFormattingHelpers() {
+    assert(nmf::ShouldUnwrapMarker("text **", "** more", "**"));
+    assert(!nmf::ShouldUnwrapMarker("text *", "* more", "**"));
+    assert(nmf::ShouldUnwrapMarker("*", "*", "*"));
+    // The inner edge of a bold span is not italic markers.
+    assert(!nmf::ShouldUnwrapMarker("**", "**", "*"));
+    assert(nmf::ShouldUnwrapMarker("~~", "~~", "~~"));
+    assert(nmf::ShouldUnwrapMarker("`", "`", "`"));
+    assert(!nmf::ShouldUnwrapMarker("", "", "**"));
+
+    assert(nmf::ChangeHeadingLevel("Title", 1) == "# Title");
+    assert(nmf::ChangeHeadingLevel("# Title", 1) == "## Title");
+    assert(nmf::ChangeHeadingLevel("###### Title", 1) == "###### Title");
+    assert(nmf::ChangeHeadingLevel("# Title", -1) == "Title");
+    assert(nmf::ChangeHeadingLevel("Title", -1) == "Title");
+    assert(nmf::ChangeHeadingLevel("  ## Indented", 1) == "  ### Indented");
+    assert(nmf::ChangeHeadingLevel("#nothash", 1) == "# #nothash");
+
+    const auto quoted = nmf::ToggleBlockquoteLines({"one", "", "two"});
+    assert(quoted[0] == "> one");
+    assert(quoted[1] == ">");
+    assert(quoted[2] == "> two");
+    const auto unquoted = nmf::ToggleBlockquoteLines(quoted);
+    assert(unquoted[0] == "one");
+    assert(unquoted[1] == "");
+    assert(unquoted[2] == "two");
+    const auto nested = nmf::ToggleBlockquoteLines({"> deep"});
+    assert(nested[0] == "deep");
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -395,6 +426,7 @@ int main() {
     TestTableParsingAndFormatting();
     TestTableColumnOps();
     TestTableCellGeometry();
+    TestInlineFormattingHelpers();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;

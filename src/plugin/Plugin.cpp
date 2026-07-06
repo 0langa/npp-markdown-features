@@ -2,6 +2,7 @@
 #include "core/MarkdownViewFeature.h"
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
+#include "plugin/FormattingController.h"
 #include "plugin/ListEditingController.h"
 #include "plugin/NppApi.h"
 #include "plugin/TableEditingController.h"
@@ -10,6 +11,7 @@
 #include "ui/SettingsDialog.h"
 #include "ui/ToolbarIcon.h"
 
+#include <algorithm>
 #include <array>
 #include <commctrl.h>
 #include <filesystem>
@@ -21,7 +23,7 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 10;
+constexpr int kCommandCount = 18;
 constexpr int kToggleIndex = 0;
 constexpr int kOutlineIndex = 1;
 constexpr int kCheckboxIndex = 2;
@@ -32,6 +34,14 @@ constexpr int kDeleteColumnIndex = 6;
 constexpr int kCycleAlignmentIndex = 7;
 constexpr int kSmartTypingIndex = 8;
 constexpr int kSettingsIndex = 9;
+constexpr int kBoldIndex = 10;
+constexpr int kItalicIndex = 11;
+constexpr int kStrikethroughIndex = 12;
+constexpr int kInlineCodeIndex = 13;
+constexpr int kHeadingUpIndex = 14;
+constexpr int kHeadingDownIndex = 15;
+constexpr int kBlockquoteIndex = 16;
+constexpr int kCodeFenceIndex = 17;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -43,6 +53,7 @@ nmf::WebViewHost g_webView;
 nmf::OutlinePanel g_outlinePanel;
 nmf::ListEditingController g_listEditing;
 nmf::TableEditingController g_tableEditing;
+nmf::FormattingController g_formatting;
 UINT_PTR g_outlineTimer = 0;
 HICON g_lightIcon = nullptr;
 HICON g_darkIcon = nullptr;
@@ -341,6 +352,46 @@ void TableCycleAlignment() {
     }
 }
 
+void WithMarkdownDocument(void (*action)(HWND)) {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (ActiveDocumentIsMarkdown(document)) {
+        action(document.scintilla);
+    }
+}
+
+void ToggleBold() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.ToggleInlineMarker(scintilla, "**"); });
+}
+
+void ToggleItalic() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.ToggleInlineMarker(scintilla, "*"); });
+}
+
+void ToggleStrikethrough() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.ToggleInlineMarker(scintilla, "~~"); });
+}
+
+void ToggleInlineCode() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.ToggleInlineMarker(scintilla, "`"); });
+}
+
+void HeadingLevelUp() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.ChangeHeading(scintilla, 1); });
+}
+
+void HeadingLevelDown() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.ChangeHeading(scintilla, -1); });
+}
+
+void ToggleBlockquoteCommand() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.ToggleBlockquote(scintilla); });
+}
+
+void InsertCodeFenceCommand() {
+    WithMarkdownDocument([](HWND scintilla) { g_formatting.InsertCodeFence(scintilla); });
+}
+
 void OpenSettings() {
     EnsureInitialized();
     if (g_markdownFeature == nullptr || g_settingsStore == nullptr) {
@@ -382,6 +433,20 @@ void RegisterCommands() {
     SetCommand(kCycleAlignmentIndex, L"Table: Cycle Column Alignment", TableCycleAlignment);
     SetCommand(kSmartTypingIndex, L"Smart Typing (Lists, Tables)", ToggleSmartTyping, nullptr, true);
     SetCommand(kSettingsIndex, L"Settings...", OpenSettings);
+    static nmf::npp::ShortcutKey boldShortcut{true, true, false, 'B'};
+    static nmf::npp::ShortcutKey italicShortcut{true, true, false, 'I'};
+    static nmf::npp::ShortcutKey strikethroughShortcut{true, true, false, 'U'};
+    static nmf::npp::ShortcutKey inlineCodeShortcut{true, true, false, 'C'};
+    static nmf::npp::ShortcutKey blockquoteShortcut{true, true, false, 'Q'};
+    static nmf::npp::ShortcutKey codeFenceShortcut{true, true, false, 'F'};
+    SetCommand(kBoldIndex, L"Bold", ToggleBold, &boldShortcut);
+    SetCommand(kItalicIndex, L"Italic", ToggleItalic, &italicShortcut);
+    SetCommand(kStrikethroughIndex, L"Strikethrough", ToggleStrikethrough, &strikethroughShortcut);
+    SetCommand(kInlineCodeIndex, L"Inline Code", ToggleInlineCode, &inlineCodeShortcut);
+    SetCommand(kHeadingUpIndex, L"Heading Level Up", HeadingLevelUp);
+    SetCommand(kHeadingDownIndex, L"Heading Level Down", HeadingLevelDown);
+    SetCommand(kBlockquoteIndex, L"Toggle Blockquote", ToggleBlockquoteCommand, &blockquoteShortcut);
+    SetCommand(kCodeFenceIndex, L"Insert Code Fence", InsertCodeFenceCommand, &codeFenceShortcut);
     registered = true;
 }
 
@@ -411,6 +476,89 @@ void NotifyDocumentChanged() {
     g_features.NotifyDocumentChanged(ActiveDocument());
     UpdateToggleCheck();
     UpdateOutlineNow();
+}
+
+// Rebuild the flat 18-entry plugin menu into grouped submenus. Command IDs
+// are preserved, so shortcuts and NPPM_SETMENUITEMCHECK keep working.
+void ReorganizeMenu() {
+    static bool done = false;
+    if (done || g_nppData._nppHandle == nullptr) {
+        return;
+    }
+    const auto pluginsMenu = reinterpret_cast<HMENU>(::SendMessage(g_nppData._nppHandle, nmf::npp::NPPM_GETMENUHANDLE, 0, 0));
+    if (pluginsMenu == nullptr) {
+        return;
+    }
+    HMENU ourMenu = nullptr;
+    const int topCount = ::GetMenuItemCount(pluginsMenu);
+    for (int index = 0; index < topCount; ++index) {
+        wchar_t label[128]{};
+        ::GetMenuString(pluginsMenu, static_cast<UINT>(index), label, 127, MF_BYPOSITION);
+        std::wstring name(label);
+        name.erase(std::remove(name.begin(), name.end(), L'&'), name.end());
+        if (name == kPluginName) {
+            ourMenu = ::GetSubMenu(pluginsMenu, index);
+            break;
+        }
+    }
+    if (ourMenu == nullptr) {
+        return;
+    }
+
+    std::array<std::wstring, kCommandCount> labels;
+    for (int index = 0; index < kCommandCount; ++index) {
+        wchar_t label[128]{};
+        ::GetMenuString(ourMenu, static_cast<UINT>(g_funcItems[index]._cmdID), label, 127, MF_BYCOMMAND);
+        labels[static_cast<size_t>(index)] = label;
+        if (labels[static_cast<size_t>(index)].empty()) {
+            return;  // unexpected menu shape; keep the flat menu
+        }
+    }
+    while (::GetMenuItemCount(ourMenu) > 0) {
+        ::RemoveMenu(ourMenu, 0, MF_BYPOSITION);
+    }
+
+    const auto append = [&](HMENU menu, int index) {
+        ::AppendMenu(menu, MF_STRING, static_cast<UINT_PTR>(g_funcItems[index]._cmdID), labels[static_cast<size_t>(index)].c_str());
+    };
+    append(ourMenu, kToggleIndex);
+    append(ourMenu, kOutlineIndex);
+    ::AppendMenu(ourMenu, MF_SEPARATOR, 0, nullptr);
+
+    HMENU formatMenu = ::CreatePopupMenu();
+    append(formatMenu, kBoldIndex);
+    append(formatMenu, kItalicIndex);
+    append(formatMenu, kStrikethroughIndex);
+    append(formatMenu, kInlineCodeIndex);
+    ::AppendMenu(formatMenu, MF_SEPARATOR, 0, nullptr);
+    append(formatMenu, kHeadingUpIndex);
+    append(formatMenu, kHeadingDownIndex);
+    ::AppendMenu(formatMenu, MF_SEPARATOR, 0, nullptr);
+    append(formatMenu, kBlockquoteIndex);
+    append(formatMenu, kCodeFenceIndex);
+    ::AppendMenu(ourMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(formatMenu), L"Format");
+
+    HMENU listsMenu = ::CreatePopupMenu();
+    append(listsMenu, kCheckboxIndex);
+    append(listsMenu, kRenumberIndex);
+    ::AppendMenu(ourMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(listsMenu), L"Lists");
+
+    HMENU tableMenu = ::CreatePopupMenu();
+    append(tableMenu, kFormatTableIndex);
+    append(tableMenu, kInsertColumnIndex);
+    append(tableMenu, kDeleteColumnIndex);
+    append(tableMenu, kCycleAlignmentIndex);
+    ::AppendMenu(ourMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(tableMenu), L"Table");
+
+    ::AppendMenu(ourMenu, MF_SEPARATOR, 0, nullptr);
+    append(ourMenu, kSmartTypingIndex);
+    append(ourMenu, kSettingsIndex);
+
+    // Recreate lost check states.
+    UpdateToggleCheck();
+    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartTypingIndex]._cmdID, g_settings.listEditing.smartEnter);
+    nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kOutlineIndex]._cmdID, g_outlinePanel.IsVisible());
+    done = true;
 }
 
 void NotifyFileSaved() {
@@ -472,6 +620,7 @@ extern "C" __declspec(dllexport) void beNotified(nmf::npp::SCNotification* notif
     switch (notifyCode->nmhdr.code) {
         case nmf::npp::NPPN_READY:
             EnsureInitialized();
+            ReorganizeMenu();
             break;
         case nmf::npp::NPPN_TBMODIFICATION:
             AddToolbarIcon();
