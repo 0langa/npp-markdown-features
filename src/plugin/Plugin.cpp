@@ -1,3 +1,4 @@
+#include "core/DocumentStats.h"
 #include "core/FeatureRegistry.h"
 #include "core/MarkdownViewFeature.h"
 #include "core/SettingsStore.h"
@@ -138,22 +139,76 @@ void UpdateOutlineNow() {
     g_outlinePanel.SetOutline(outline, name, isMarkdown);
 }
 
-void CALLBACK OutlineTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
+bool g_statusShowsStats = false;
+
+void UpdateStatsNow() {
+    const auto document = ActiveDocument();
+    if (!ActiveDocumentIsMarkdown(document) || document.scintilla == nullptr) {
+        if (g_statusShowsStats) {
+            nmf::npp::SetStatus(g_nppData._nppHandle, L"");
+            g_statusShowsStats = false;
+        }
+        return;
+    }
+    const auto length = static_cast<ptrdiff_t>(::SendMessage(document.scintilla, nmf::npp::SCI_GETLENGTH, 0, 0));
+    if (length > 4 * 1024 * 1024) {
+        return;  // skip live stats for very large documents
+    }
+
+    const auto text = ReadDocumentText(document);
+    const auto lines = nmf::SplitLines(text);
+
+    bool selection = false;
+    nmf::DocumentStatistics stats;
+    const auto selStart = static_cast<ptrdiff_t>(::SendMessage(document.scintilla, nmf::npp::SCI_GETSELECTIONSTART, 0, 0));
+    const auto selEnd = static_cast<ptrdiff_t>(::SendMessage(document.scintilla, nmf::npp::SCI_GETSELECTIONEND, 0, 0));
+    if (selEnd > selStart && static_cast<size_t>(selEnd) <= text.size()) {
+        selection = true;
+        stats = nmf::ComputeStats(nmf::SplitLines(text.substr(static_cast<size_t>(selStart), static_cast<size_t>(selEnd - selStart))));
+    } else {
+        stats = nmf::ComputeStats(lines);
+    }
+
+    const auto caret = static_cast<ptrdiff_t>(::SendMessage(document.scintilla, nmf::npp::SCI_GETCURRENTPOS, 0, 0));
+    const int caretLine = static_cast<int>(::SendMessage(document.scintilla, nmf::npp::SCI_LINEFROMPOSITION, caret, 0));
+    const auto outline = nmf::MarkdownOutline::Parse(text);
+    const auto chain = nmf::BreadcrumbChain(outline.Headings(), caretLine);
+
+    std::wstring status;
+    if (selection) {
+        status += L"Selection: ";
+    }
+    status += std::to_wstring(stats.words) + L" words · " + std::to_wstring(stats.characters) + L" chars";
+    if (stats.readingMinutes > 0) {
+        status += L" · ~" + std::to_wstring(stats.readingMinutes) + L" min";
+    }
+    if (!chain.empty()) {
+        status += L" · ";
+        for (size_t index = 0; index < chain.size(); ++index) {
+            if (index > 0) {
+                status += L" › ";
+            }
+            status += nmf::Utf8ToWide(chain[index]);
+        }
+    }
+    nmf::npp::SetStatus(g_nppData._nppHandle, status);
+    g_statusShowsStats = true;
+}
+
+void CALLBACK IdleTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
     ::KillTimer(nullptr, id);
     if (id == g_outlineTimer) {
         g_outlineTimer = 0;
         UpdateOutlineNow();
+        UpdateStatsNow();
     }
 }
 
-void ScheduleOutlineUpdate() {
-    if (!g_outlinePanel.IsCreated() || !g_outlinePanel.IsVisible()) {
-        return;
-    }
+void ScheduleIdleUpdate() {
     if (g_outlineTimer != 0) {
         ::KillTimer(nullptr, g_outlineTimer);
     }
-    g_outlineTimer = ::SetTimer(nullptr, 0, 350, OutlineTimerProc);
+    g_outlineTimer = ::SetTimer(nullptr, 0, 350, IdleTimerProc);
 }
 
 // Intercepts Tab/Shift+Tab ahead of Scintilla for table cell navigation.
@@ -661,6 +716,7 @@ void NotifyDocumentChanged() {
     g_features.NotifyDocumentChanged(ActiveDocument());
     UpdateToggleCheck();
     UpdateOutlineNow();
+    UpdateStatsNow();
 }
 
 // Rebuild the flat 18-entry plugin menu into grouped submenus. Command IDs
@@ -845,7 +901,13 @@ extern "C" __declspec(dllexport) void beNotified(nmf::npp::SCNotification* notif
         case nmf::npp::SCN_MODIFIED:
             if ((notifyCode->nmhdr.hwndFrom == g_nppData._scintillaMainHandle || notifyCode->nmhdr.hwndFrom == g_nppData._scintillaSecondHandle)
                 && (notifyCode->modificationType & (nmf::npp::SC_MOD_INSERTTEXT | nmf::npp::SC_MOD_DELETETEXT)) != 0) {
-                ScheduleOutlineUpdate();
+                ScheduleIdleUpdate();
+            }
+            break;
+        case nmf::npp::SCN_UPDATEUI:
+            if (g_initialized
+                && (notifyCode->nmhdr.hwndFrom == g_nppData._scintillaMainHandle || notifyCode->nmhdr.hwndFrom == g_nppData._scintillaSecondHandle)) {
+                ScheduleIdleUpdate();
             }
             break;
         case nmf::npp::SCN_CHARADDED:

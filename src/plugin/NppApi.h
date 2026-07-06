@@ -77,6 +77,7 @@ constexpr int SC_CP_UTF8 = 65001;
 
 constexpr UINT SCN_MODIFIED = 2008;
 constexpr UINT SCN_CHARADDED = 2001;
+constexpr UINT SCN_UPDATEUI = 2007;
 constexpr int SC_MOD_INSERTTEXT = 0x1;
 constexpr int SC_MOD_DELETETEXT = 0x2;
 
@@ -97,6 +98,7 @@ constexpr UINT SCI_REPLACETARGET = 2194;
 constexpr UINT SCI_LINELENGTH = 2350;
 constexpr UINT SCI_GETSELECTIONS = 2570;
 constexpr UINT SCI_SETSEL = 2160;
+constexpr UINT SCI_GETSELTEXT = 2161;
 constexpr UINT SCI_GETCHARAT = 2007;
 constexpr UINT SCI_SETTEXT = 2181;
 constexpr UINT SCI_WORDSTARTPOSITION = 2266;

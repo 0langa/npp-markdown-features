@@ -1,5 +1,6 @@
 #include "rendering/MarkdownRenderer.h"
 
+#include "core/DocumentStats.h"
 #include "core/Strings.h"
 
 #include <cmark-gfm-core-extensions.h>
@@ -80,6 +81,36 @@ std::string EscapeHtmlText(const std::string& text) {
 RenderedMarkdown MarkdownRenderer::Render(const std::string& markdownUtf8, const std::wstring& sourcePath) const {
     cmark_gfm_core_extensions_ensure_registered();
 
+    // YAML frontmatter would render as a broken thematic break / setext mess.
+    // Blank those lines (keeping the line count identical so data-sourcepos
+    // stays aligned with the editor) and show the raw text in a collapsible
+    // block instead.
+    std::string frontmatterText;
+    std::string parseInput = markdownUtf8;
+    {
+        const auto lines = SplitLines(markdownUtf8);
+        const auto frontmatter = DetectFrontmatter(lines);
+        if (frontmatter.present) {
+            std::string blanked;
+            std::string raw;
+            for (int index = 0; index < static_cast<int>(lines.size()); ++index) {
+                const bool inFrontmatter = index <= frontmatter.endLine;
+                if (inFrontmatter && index > 0 && index < frontmatter.endLine) {
+                    raw += lines[static_cast<size_t>(index)];
+                    raw += '\n';
+                }
+                if (index > 0) {
+                    blanked += '\n';
+                }
+                if (!inFrontmatter) {
+                    blanked += lines[static_cast<size_t>(index)];
+                }
+            }
+            frontmatterText = raw;
+            parseInput = std::move(blanked);
+        }
+    }
+
     const int options = CMARK_OPT_SOURCEPOS | CMARK_OPT_UNSAFE | CMARK_OPT_FOOTNOTES | CMARK_OPT_VALIDATE_UTF8;
     cmark_parser* parser = cmark_parser_new(options);
     if (parser == nullptr) {
@@ -90,7 +121,7 @@ RenderedMarkdown MarkdownRenderer::Render(const std::string& markdownUtf8, const
             cmark_parser_attach_syntax_extension(parser, extension);
         }
     }
-    cmark_parser_feed(parser, markdownUtf8.data(), markdownUtf8.size());
+    cmark_parser_feed(parser, parseInput.data(), parseInput.size());
     cmark_node* document = cmark_parser_finish(parser);
     if (document == nullptr) {
         cmark_parser_free(parser);
@@ -102,8 +133,11 @@ RenderedMarkdown MarkdownRenderer::Render(const std::string& markdownUtf8, const
     cmark_node_free(document);
     cmark_parser_free(parser);
 
-    const auto outline = MarkdownOutline::Parse(markdownUtf8);
+    const auto outline = MarkdownOutline::Parse(parseInput);
     body = AddHeadingAnchors(std::move(body), outline);
+    if (!frontmatterText.empty()) {
+        body = "<details class=\"nmf-frontmatter\"><summary>Front matter</summary><pre>" + EscapeHtmlText(frontmatterText) + "</pre></details>\n" + body;
+    }
     return {body, BuildDocument(body, sourcePath), outline};
 }
 
@@ -144,6 +178,9 @@ a { color: #0b57d0; }
 li.task-list-item { list-style-type: none; }
 li.task-list-item input[type="checkbox"] { margin: 0 .45em .1em -1.35em; vertical-align: middle; }
 section.footnotes { margin-top: 2em; padding-top: .75em; border-top: 1px solid #d7dce2; font-size: .92em; }
+details.nmf-frontmatter { margin: 0 0 1.25em; padding: .4em .8em; background: #f5f7f9; border: 1px solid #d7dce2; border-radius: 6px; font-size: .9em; }
+details.nmf-frontmatter summary { cursor: pointer; color: #555; }
+details.nmf-frontmatter pre { margin: .5em 0 .25em; border: none; background: transparent; padding: 0; }
 @media (prefers-color-scheme: dark) {
   body { color: #e6e6e6; background: #1f1f1f; }
   a { color: #8ab4f8; }
@@ -151,6 +188,8 @@ section.footnotes { margin-top: 2em; padding-top: .75em; border-top: 1px solid #
   th, td, h1, pre { border-color: #454b55; }
   blockquote { border-left-color: #5f6670; color: #c8c8c8; }
   section.footnotes { border-top-color: #454b55; }
+  details.nmf-frontmatter { background: #2b2f36; border-color: #454b55; }
+  details.nmf-frontmatter summary { color: #b8b8b8; }
 }
 </style></head><body>)";
     document += bodyHtml;

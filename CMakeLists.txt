@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(NppMarkdownFeatures VERSION 0.8.0 LANGUAGES C CXX)
+project(NppMarkdownFeatures VERSION 0.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -60,6 +60,7 @@ add_library(WebView2LoaderStatic STATIC IMPORTED GLOBAL)
 set_target_properties(WebView2LoaderStatic PROPERTIES IMPORTED_LOCATION "${WEBVIEW2_LOADER_LIB}")
 
 add_library(nmf_core
+  src/core/DocumentStats.cpp
   src/core/FeatureRegistry.cpp
   src/core/HtmlExport.cpp
   src/core/InlineFormatting.cpp
@@ -123,8 +124,8 @@ target_link_libraries(NppMarkdownFeatures PRIVATE
 target_compile_definitions(NppMarkdownFeatures PRIVATE NMF_PLUGIN_BUILD)
 
 if(MSVC)
-  target_compile_options(nmf_core PRIVATE /W4 /permissive-)
-  target_compile_options(NppMarkdownFeatures PRIVATE /W4 /permissive-)
+  target_compile_options(nmf_core PRIVATE /W4 /permissive- /utf-8)
+  target_compile_options(NppMarkdownFeatures PRIVATE /W4 /permissive- /utf-8)
 endif()
 
 if(BUILD_TESTING)
@@ -133,5 +134,8 @@ if(BUILD_TESTING)
   )
   target_link_libraries(nmf_tests PRIVATE nmf_core)
   target_compile_definitions(nmf_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+  if(MSVC)
+    target_compile_options(nmf_tests PRIVATE /utf-8)
+  endif()
   add_test(NAME nmf_tests COMMAND nmf_tests)
 endif()

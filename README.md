@@ -36,7 +36,7 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.8.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.9.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
@@ -72,6 +72,8 @@ Version `0.8.0` builds a native x64 Notepad++ plugin DLL with:
 - **TOC & document cleanup** (in the Format submenu):
   - `Insert/Update TOC` maintains a table of contents between `<!-- toc -->` / `<!-- /toc -->` markers (inserted at the caret on first run) — GitHub-style slugs incl. duplicate suffixes, a single leading H1 is treated as the title, idempotent updates
   - `Format Document` normalizes conservatively: trims trailing whitespace (two-space hard breaks preserved), collapses blank-line runs, guarantees blank lines around headings and fences, unifies bullet markers to `-`, and reformats every table — fenced code blocks are never touched
+- **Live document stats & breadcrumb** in the status bar: word count, character count, reading time (~200 wpm), and the current heading path (`Alpha › Beta`), updating as you type and move; select text to see selection stats instead; YAML frontmatter and fenced code are excluded from counts (skipped for files > 4 MB)
+- **YAML frontmatter awareness**: frontmatter is excluded from stats and shown in the rendered view as a collapsible "Front matter" block instead of broken markup, without disturbing scroll sync
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

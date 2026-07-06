@@ -1,3 +1,4 @@
+#include "core/DocumentStats.h"
 #include "core/HtmlExport.h"
 #include "core/InlineFormatting.h"
 #include "core/LinkTools.h"
@@ -563,6 +564,62 @@ void TestDocumentCleanup() {
     assert(!cleaned.empty() && !cleaned.back().empty());
 }
 
+void TestDocumentStats() {
+    const std::vector<std::string> lines{
+        "---",
+        "title: Ignored Words Here",
+        "---",
+        "",
+        "# Heading",
+        "",
+        "One two three.",
+        "",
+        "```",
+        "code words ignored",
+        "```",
+        "",
+        "Vier fünf.",
+    };
+    const auto frontmatter = nmf::DetectFrontmatter(lines);
+    assert(frontmatter.present && frontmatter.endLine == 2);
+
+    const auto stats = nmf::ComputeStats(lines);
+    // Heading + "One two three." + "Vier fünf." = 1 + 3 + 2 = 6 words.
+    assert(stats.words == 6);
+    assert(stats.readingMinutes == 1);
+    assert(stats.characters > 0);
+
+    assert(!nmf::DetectFrontmatter({"# No front matter"}).present);
+    assert(!nmf::DetectFrontmatter({"---", "never closed"}).present);
+
+    const auto splitCrlf = nmf::SplitLines("a\r\nb\nc\rd");
+    assert(splitCrlf.size() == 4);
+    assert(splitCrlf[0] == "a" && splitCrlf[1] == "b" && splitCrlf[2] == "c" && splitCrlf[3] == "d");
+}
+
+void TestBreadcrumb() {
+    const auto outline = nmf::MarkdownOutline::Parse("# One\n\ntext\n\n## Two\n\nmore\n\n### Three\n\nend\n\n## Late\n");
+    const auto atThree = nmf::BreadcrumbChain(outline.Headings(), 9);
+    assert(atThree.size() == 3);
+    assert(atThree[0] == "One" && atThree[1] == "Two" && atThree[2] == "Three");
+    const auto atLate = nmf::BreadcrumbChain(outline.Headings(), 12);
+    assert(atLate.size() == 2);
+    assert(atLate[1] == "Late");
+    const auto atTop = nmf::BreadcrumbChain(outline.Headings(), 0);
+    assert(atTop.size() == 1 && atTop[0] == "One");
+}
+
+void TestFrontmatterRendering() {
+    nmf::MarkdownRenderer renderer;
+    const auto rendered = renderer.Render("---\ntitle: Hi\ntags: [a, b]\n---\n\n# Real Heading\n", L"");
+    assert(rendered.bodyHtml.find("nmf-frontmatter") != std::string::npos);
+    assert(rendered.bodyHtml.find("title: Hi") != std::string::npos);
+    // Heading keeps its original (blanked-line-preserving) source line: line 6 -> sourcepos 6.
+    assert(rendered.bodyHtml.find("<h1 id=\"nmf-heading-real-heading\" data-sourcepos=\"6:1-") != std::string::npos);
+    // No stray <hr> from the --- delimiters.
+    assert(rendered.bodyHtml.find("<hr") == std::string::npos);
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -596,6 +653,9 @@ int main() {
     TestHtmlExport();
     TestTocGeneration();
     TestDocumentCleanup();
+    TestDocumentStats();
+    TestBreadcrumb();
+    TestFrontmatterRendering();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;
