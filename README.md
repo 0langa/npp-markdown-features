@@ -36,7 +36,7 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.6.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.7.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
@@ -65,6 +65,10 @@ Version `0.6.0` builds a native x64 Notepad++ plugin DLL with:
   - Insert Link (`Ctrl+Alt+L`) / Insert Image scaffolds with the caret in the right slot
   - Follow Link (`Ctrl+Alt+G`): opens `https://` links in the browser, `#anchors` jump to the matching heading, relative file links open in Notepad++ (with `%20` decoding and `[ref][id]` resolution)
   - Check Links: validates every local file link and heading anchor in the document and opens a report listing broken ones (external URLs are counted but not fetched)
+- **Export** (`Markdown Features > Export`):
+  - `Export HTML...` writes a standalone styled HTML file (save dialog, inline CSS, relative images resolve via `<base>`)
+  - `Copy as HTML` puts the rendered selection (or whole document) on the clipboard as `HTML Format` — paste rich text straight into Word, Outlook, or Gmail — plus the raw HTML as plain text
+  - `Print Rendered View...` opens the WebView2 print dialog (print or save as PDF); renders first if you're in raw mode
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

@@ -103,6 +103,22 @@ void WebViewHost::ScrollToSourceLine(double sourceLine) {
     ApplyPendingScroll();
 }
 
+void WebViewHost::PrintRendered() {
+    if (!webView_) {
+        return;
+    }
+    ComPtr<ICoreWebView2_16> webView16;
+    if (SUCCEEDED(webView_.As(&webView16)) && webView16) {
+        webView16->ShowPrintUI(COREWEBVIEW2_PRINT_DIALOG_KIND_BROWSER);
+        return;
+    }
+    webView_->ExecuteScript(L"window.print();", nullptr);
+}
+
+void WebViewHost::SetPrintPending() {
+    printPending_ = true;
+}
+
 void WebViewHost::Resize() {
     if (hostWindow_ == nullptr || parentScintilla_ == nullptr) {
         return;
@@ -218,6 +234,10 @@ bool WebViewHost::EnsureWebView() {
                                     Callback<ICoreWebView2NavigationCompletedEventHandler>(
                                         [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
                                             ApplyPendingScroll();
+                                            if (printPending_) {
+                                                printPending_ = false;
+                                                PrintRendered();
+                                            }
                                             return S_OK;
                                         })
                                         .Get(),

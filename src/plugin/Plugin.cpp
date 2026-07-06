@@ -2,6 +2,7 @@
 #include "core/MarkdownViewFeature.h"
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
+#include "plugin/ExportController.h"
 #include "plugin/FormattingController.h"
 #include "plugin/LinkController.h"
 #include "plugin/ListEditingController.h"
@@ -24,7 +25,7 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 22;
+constexpr int kCommandCount = 25;
 constexpr int kToggleIndex = 0;
 constexpr int kOutlineIndex = 1;
 constexpr int kCheckboxIndex = 2;
@@ -47,6 +48,9 @@ constexpr int kInsertLinkIndex = 18;
 constexpr int kInsertImageIndex = 19;
 constexpr int kFollowLinkIndex = 20;
 constexpr int kCheckLinksIndex = 21;
+constexpr int kExportHtmlIndex = 22;
+constexpr int kCopyHtmlIndex = 23;
+constexpr int kPrintIndex = 24;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -60,6 +64,7 @@ nmf::ListEditingController g_listEditing;
 nmf::TableEditingController g_tableEditing;
 nmf::FormattingController g_formatting;
 nmf::LinkController g_links;
+nmf::ExportController g_export;
 UINT_PTR g_outlineTimer = 0;
 HICON g_lightIcon = nullptr;
 HICON g_darkIcon = nullptr;
@@ -425,6 +430,42 @@ void FollowLinkCommand() {
     }
 }
 
+void ExportHtmlCommand() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (!ActiveDocumentIsMarkdown(document)) {
+        return;
+    }
+    const auto status = g_export.ExportHtml(document.scintilla, g_nppData._nppHandle, document.path, ReadDocumentText(document));
+    nmf::npp::SetStatus(g_nppData._nppHandle, status);
+}
+
+void CopyAsHtmlCommand() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (!ActiveDocumentIsMarkdown(document)) {
+        return;
+    }
+    const auto status = g_export.CopyAsHtml(document.scintilla, document.path, ReadDocumentText(document));
+    nmf::npp::SetStatus(g_nppData._nppHandle, status);
+}
+
+void PrintRenderedCommand() {
+    EnsureInitialized();
+    const auto document = ActiveDocument();
+    if (!ActiveDocumentIsMarkdown(document) || g_markdownFeature == nullptr) {
+        return;
+    }
+    if (g_markdownFeature->IsRenderedMode()) {
+        g_webView.PrintRendered();
+    } else {
+        // Render first; the WebView prints once navigation completes.
+        g_webView.SetPrintPending();
+        ToggleRenderedView();
+    }
+    nmf::npp::SetStatus(g_nppData._nppHandle, L"Markdown Features: print dialog opened");
+}
+
 void CheckLinksCommand() {
     EnsureInitialized();
     const auto document = ActiveDocument();
@@ -503,6 +544,9 @@ void RegisterCommands() {
     SetCommand(kInsertImageIndex, L"Insert Image", InsertImageCommand);
     SetCommand(kFollowLinkIndex, L"Follow Link", FollowLinkCommand, &followLinkShortcut);
     SetCommand(kCheckLinksIndex, L"Check Links", CheckLinksCommand);
+    SetCommand(kExportHtmlIndex, L"Export HTML...", ExportHtmlCommand);
+    SetCommand(kCopyHtmlIndex, L"Copy as HTML", CopyAsHtmlCommand);
+    SetCommand(kPrintIndex, L"Print Rendered View...", PrintRenderedCommand);
     registered = true;
 }
 
@@ -613,6 +657,12 @@ void ReorganizeMenu() {
     append(linksMenu, kFollowLinkIndex);
     append(linksMenu, kCheckLinksIndex);
     ::AppendMenu(ourMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(linksMenu), L"Links");
+
+    HMENU exportMenu = ::CreatePopupMenu();
+    append(exportMenu, kExportHtmlIndex);
+    append(exportMenu, kCopyHtmlIndex);
+    append(exportMenu, kPrintIndex);
+    ::AppendMenu(ourMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(exportMenu), L"Export");
 
     ::AppendMenu(ourMenu, MF_SEPARATOR, 0, nullptr);
     append(ourMenu, kSmartTypingIndex);

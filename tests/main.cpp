@@ -1,3 +1,4 @@
+#include "core/HtmlExport.h"
 #include "core/InlineFormatting.h"
 #include "core/LinkTools.h"
 #include "core/ListEditing.h"
@@ -447,6 +448,28 @@ void TestLinkClassification() {
     assert(nmf::GithubSlug("under_score") == "under_score");
 }
 
+void TestHtmlExport() {
+    assert(nmf::RemoveSourcepos("<p data-sourcepos=\"1:1-2:3\">x</p>") == "<p>x</p>");
+    assert(nmf::RemoveSourcepos("<h1 id=\"a\" data-sourcepos=\"1:1-1:5\">T</h1><p data-sourcepos=\"3:1-3:2\">b</p>")
+           == "<h1 id=\"a\">T</h1><p>b</p>");
+    assert(nmf::RemoveSourcepos("<p>no attrs</p>") == "<p>no attrs</p>");
+
+    const std::string fragment = "<h1>Title</h1><p>Body &amp; more</p>";
+    const auto payload = nmf::BuildClipboardHtml(fragment);
+    // Offsets in the header must point exactly at the fragment.
+    const auto readOffset = [&](const char* key) {
+        const auto position = payload.find(key);
+        assert(position != std::string::npos);
+        return static_cast<size_t>(std::stoul(payload.substr(position + strlen(key), 10)));
+    };
+    const auto startFragment = readOffset("StartFragment:");
+    const auto endFragment = readOffset("EndFragment:");
+    const auto endHtml = readOffset("EndHTML:");
+    assert(payload.substr(startFragment, endFragment - startFragment) == fragment);
+    assert(endHtml == payload.size());
+    assert(payload.find("<!--StartFragment-->") + strlen("<!--StartFragment-->") == startFragment);
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -477,6 +500,7 @@ int main() {
     TestInlineFormattingHelpers();
     TestLinkParsing();
     TestLinkClassification();
+    TestHtmlExport();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;

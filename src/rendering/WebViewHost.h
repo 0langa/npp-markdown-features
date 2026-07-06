@@ -22,6 +22,8 @@ public:
     ScrollTarget Hide();
     ScrollTarget LastScrollTarget() const;
     void ScrollToSourceLine(double sourceLine);
+    void PrintRendered();     // opens the WebView2 print UI (browser dialog)
+    void SetPrintPending();   // print once the next navigation completes
     void Resize();
     void Destroy();
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -43,6 +45,7 @@ private:
     ScrollTarget lastScrollTarget_{};
     bool webViewErrorShown_{false};
     bool webViewCreating_{false};
+    bool printPending_{false};
     Microsoft::WRL::ComPtr<ICoreWebView2Environment> environment_;
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
     Microsoft::WRL::ComPtr<ICoreWebView2> webView_;

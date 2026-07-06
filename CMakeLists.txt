@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(NppMarkdownFeatures VERSION 0.6.0 LANGUAGES C CXX)
+project(NppMarkdownFeatures VERSION 0.7.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,7 @@ set_target_properties(WebView2LoaderStatic PROPERTIES IMPORTED_LOCATION "${WEBVI
 
 add_library(nmf_core
   src/core/FeatureRegistry.cpp
+  src/core/HtmlExport.cpp
   src/core/InlineFormatting.cpp
   src/core/LinkTools.cpp
   src/core/ListEditing.cpp
@@ -89,6 +90,7 @@ target_compile_definitions(nmf_core PUBLIC
 
 add_library(NppMarkdownFeatures SHARED
   src/plugin/Plugin.cpp
+  src/plugin/ExportController.cpp
   src/plugin/FormattingController.cpp
   src/plugin/LinkController.cpp
   src/plugin/ListEditingController.cpp
@@ -114,6 +116,7 @@ target_link_libraries(NppMarkdownFeatures PRIVATE
   user32
   gdi32
   comctl32
+  comdlg32
   advapi32
 )
 target_compile_definitions(NppMarkdownFeatures PRIVATE NMF_PLUGIN_BUILD)
