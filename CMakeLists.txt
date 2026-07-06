@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(NppMarkdownFeatures VERSION 0.1.0 LANGUAGES C CXX)
+project(NppMarkdownFeatures VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -88,6 +88,7 @@ add_library(NppMarkdownFeatures SHARED
   src/plugin/NppApi.cpp
   src/rendering/WebViewHost.cpp
   src/ui/AboutDialog.cpp
+  src/ui/OutlinePanel.cpp
   src/ui/SettingsDialog.cpp
   src/ui/ToolbarIcon.cpp
 )

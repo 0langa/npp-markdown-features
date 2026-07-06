@@ -17,9 +17,14 @@ struct MarkdownViewSettings {
     std::vector<std::wstring> extensions{L".md", L".markdown"};
 };
 
+struct OutlineSettings {
+    bool visible{false};
+};
+
 struct AppSettings {
     int schemaVersion{1};
     MarkdownViewSettings markdownView{};
+    OutlineSettings outline{};
 };
 
 std::wstring ToString(DisplayMode mode);

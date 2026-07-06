@@ -4,6 +4,7 @@
 #include "core/Strings.h"
 #include "plugin/NppApi.h"
 #include "rendering/WebViewHost.h"
+#include "ui/OutlinePanel.h"
 #include "ui/SettingsDialog.h"
 #include "ui/ToolbarIcon.h"
 
@@ -17,9 +18,10 @@ namespace {
 using nmf::PluginCommand;
 
 constexpr wchar_t kPluginName[] = L"Markdown Features";
-constexpr int kCommandCount = 2;
+constexpr int kCommandCount = 3;
 constexpr int kToggleIndex = 0;
-constexpr int kSettingsIndex = 1;
+constexpr int kOutlineIndex = 1;
+constexpr int kSettingsIndex = 2;
 
 nmf::npp::NppData g_nppData{};
 std::array<nmf::npp::FuncItem, kCommandCount> g_funcItems{};
@@ -28,6 +30,8 @@ nmf::AppSettings g_settings;
 nmf::FeatureRegistry g_features;
 nmf::MarkdownViewFeature* g_markdownFeature = nullptr;
 nmf::WebViewHost g_webView;
+nmf::OutlinePanel g_outlinePanel;
+UINT_PTR g_outlineTimer = 0;
 HICON g_lightIcon = nullptr;
 HICON g_darkIcon = nullptr;
 HBITMAP g_toolbarBitmap = nullptr;
@@ -75,6 +79,42 @@ void SaveSettings() {
     }
 }
 
+bool ActiveDocumentIsMarkdown(const nmf::ActiveDocument& document) {
+    return g_markdownFeature != nullptr && nmf::EndsWithMarkdownExtension(document.path, g_markdownFeature->Settings().extensions);
+}
+
+void UpdateOutlineNow() {
+    if (!g_outlinePanel.IsCreated() || !g_outlinePanel.IsVisible()) {
+        return;
+    }
+    const auto document = ActiveDocument();
+    const bool isMarkdown = ActiveDocumentIsMarkdown(document) && document.scintilla != nullptr;
+    nmf::MarkdownOutline outline;
+    if (isMarkdown) {
+        outline = nmf::MarkdownOutline::Parse(ReadDocumentText(document));
+    }
+    const auto name = document.path.empty() ? std::wstring{} : std::filesystem::path(document.path).filename().wstring();
+    g_outlinePanel.SetOutline(outline, name, isMarkdown);
+}
+
+void CALLBACK OutlineTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
+    ::KillTimer(nullptr, id);
+    if (id == g_outlineTimer) {
+        g_outlineTimer = 0;
+        UpdateOutlineNow();
+    }
+}
+
+void ScheduleOutlineUpdate() {
+    if (!g_outlinePanel.IsCreated() || !g_outlinePanel.IsVisible()) {
+        return;
+    }
+    if (g_outlineTimer != 0) {
+        ::KillTimer(nullptr, g_outlineTimer);
+    }
+    g_outlineTimer = ::SetTimer(nullptr, 0, 350, OutlineTimerProc);
+}
+
 void EnsureInitialized() {
     if (g_initialized || g_nppData._nppHandle == nullptr) {
         return;
@@ -114,9 +154,36 @@ void EnsureInitialized() {
     g_markdownFeature = markdownFeature.get();
     g_features.Add(std::move(markdownFeature));
     g_features.LoadSettings(g_settings);
+
+    g_outlinePanel.Initialize(g_nppData._nppHandle, kOutlineIndex);
+    g_outlinePanel.SetJumpCallback([](int line) {
+        const auto document = ActiveDocument();
+        if (document.scintilla == nullptr) {
+            return;
+        }
+        ::SendMessage(document.scintilla, nmf::npp::SCI_ENSUREVISIBLE, line, 0);
+        ::SendMessage(document.scintilla, nmf::npp::SCI_GOTOLINE, line, 0);
+        nmf::npp::SetScintillaFirstVisibleLine(document.scintilla, line);
+        if (g_markdownFeature != nullptr && g_markdownFeature->IsRenderedMode() && ActiveDocumentIsMarkdown(document)) {
+            g_webView.ScrollToSourceLine(static_cast<double>(line) + 1.0);
+        } else {
+            ::SendMessage(document.scintilla, nmf::npp::SCI_GRABFOCUS, 0, 0);
+        }
+    });
+    g_outlinePanel.SetVisibilityCallback([](bool visible) {
+        g_settings.outline.visible = visible;
+        nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kOutlineIndex]._cmdID, visible);
+        SaveSettings();
+    });
+
     g_initialized = true;
     g_features.NotifyDocumentChanged(ActiveDocument());
     UpdateToggleCheck();
+
+    if (g_settings.outline.visible) {
+        g_outlinePanel.Show();
+        UpdateOutlineNow();
+    }
 }
 
 void ToggleRenderedView() {
@@ -124,6 +191,16 @@ void ToggleRenderedView() {
     g_features.DispatchCommand(PluginCommand::ToggleRenderedView, ActiveDocument());
     UpdateToggleCheck();
     SaveSettings();
+}
+
+void ToggleOutlinePanel() {
+    EnsureInitialized();
+    if (g_outlinePanel.IsVisible()) {
+        g_outlinePanel.Hide();
+    } else {
+        g_outlinePanel.Show();
+        UpdateOutlineNow();
+    }
 }
 
 void OpenSettings() {
@@ -154,7 +231,9 @@ void RegisterCommands() {
         return;
     }
     static nmf::npp::ShortcutKey toggleShortcut{true, false, true, 'M'};
+    static nmf::npp::ShortcutKey outlineShortcut{true, false, true, 'O'};
     SetCommand(kToggleIndex, L"Toggle Rendered View", ToggleRenderedView, &toggleShortcut);
+    SetCommand(kOutlineIndex, L"Document Outline", ToggleOutlinePanel, &outlineShortcut);
     SetCommand(kSettingsIndex, L"Settings...", OpenSettings);
     registered = true;
 }
@@ -184,6 +263,7 @@ void NotifyDocumentChanged() {
     EnsureInitialized();
     g_features.NotifyDocumentChanged(ActiveDocument());
     UpdateToggleCheck();
+    UpdateOutlineNow();
 }
 
 void NotifyFileSaved() {
@@ -194,6 +274,11 @@ void NotifyFileSaved() {
 
 void Shutdown() {
     SaveSettings();
+    if (g_outlineTimer != 0) {
+        ::KillTimer(nullptr, g_outlineTimer);
+        g_outlineTimer = 0;
+    }
+    g_outlinePanel.Destroy();
     g_webView.Destroy();
     if (g_lightIcon != nullptr) {
         ::DestroyIcon(g_lightIcon);
@@ -252,8 +337,17 @@ extern "C" __declspec(dllexport) void beNotified(nmf::npp::SCNotification* notif
         case nmf::npp::NPPN_FILESAVED:
             NotifyFileSaved();
             break;
+        case nmf::npp::NPPN_DARKMODECHANGED:
+            g_outlinePanel.HandleDarkModeChanged();
+            break;
         case nmf::npp::NPPN_SHUTDOWN:
             Shutdown();
+            break;
+        case nmf::npp::SCN_MODIFIED:
+            if ((notifyCode->nmhdr.hwndFrom == g_nppData._scintillaMainHandle || notifyCode->nmhdr.hwndFrom == g_nppData._scintillaSecondHandle)
+                && (notifyCode->modificationType & (nmf::npp::SC_MOD_INSERTTEXT | nmf::npp::SC_MOD_DELETETEXT)) != 0) {
+                ScheduleOutlineUpdate();
+            }
             break;
         default:
             break;

@@ -46,9 +46,25 @@ the backbone of raw/rendered scroll preservation:
 - Fallback order when sourcepos data is unavailable: nearest heading anchor id,
   then plain viewport ratio.
 
-`MarkdownOutline` still parses ATX headings natively to inject stable heading
-ids (`nmf-heading-*`) — these serve anchor fallback today and the outline
-panel / TOC features later.
+`MarkdownOutline` extracts headings (ATX and setext) from the cmark-gfm AST —
+the same parser configuration as the renderer, so heading lines always agree
+with `data-sourcepos`. Stable heading ids (`nmf-heading-*`) are injected into
+the rendered HTML and serve as the anchor fallback channel.
+
+## Document Outline Panel
+
+`OutlinePanel` (src/ui) is a docking-manager panel (right side by default)
+holding a filter edit box and a heading tree:
+
+- Registered lazily on first show via `NPPM_DMMREGASDCKDLG`; visibility is
+  persisted in settings and restored on startup.
+- Live updates: `SCN_MODIFIED` (insert/delete) debounces a 350 ms timer that
+  re-parses the outline; unchanged outlines skip the tree rebuild.
+- Click or Enter jumps to the heading's document line; in rendered mode the
+  WebView overlay is scrolled to the same source line instead of focusing the
+  editor.
+- Dark mode is handled by `NPPM_DARKMODESUBCLASSANDTHEME` on creation and on
+  `NPPN_DARKMODECHANGED`.
 
 ## Open Questions
 

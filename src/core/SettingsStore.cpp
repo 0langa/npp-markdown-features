@@ -30,6 +30,9 @@ nlohmann::json ToJson(const AppSettings& settings) {
             {"refreshMode", Narrow(settings.markdownView.refreshMode)},
             {"extensions", extensions},
         }},
+        {"outline", {
+            {"visible", settings.outline.visible},
+        }},
     };
 }
 
@@ -59,6 +62,9 @@ AppSettings FromJson(const nlohmann::json& json) {
     if (settings.markdownView.extensions.empty()) {
         settings.markdownView.extensions = {L".md", L".markdown"};
     }
+
+    const auto outline = json.value("outline", nlohmann::json::object());
+    settings.outline.visible = outline.value("visible", false);
     return settings;
 }
 

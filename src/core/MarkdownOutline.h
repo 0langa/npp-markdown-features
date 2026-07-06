@@ -13,6 +13,10 @@ struct MarkdownHeading {
     std::string anchorId;
 };
 
+inline bool operator==(const MarkdownHeading& a, const MarkdownHeading& b) {
+    return a.line == b.line && a.level == b.level && a.text == b.text && a.anchorId == b.anchorId;
+}
+
 class MarkdownOutline {
 public:
     static MarkdownOutline Parse(const std::string& markdownUtf8);

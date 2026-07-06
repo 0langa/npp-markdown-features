@@ -82,6 +82,18 @@ void TestMarkdownOutline() {
     assert(heading->anchorId == "nmf-heading-two");
 }
 
+void TestMarkdownOutlineSetextAndInline() {
+    const auto outline = nmf::MarkdownOutline::Parse("Setext Title\n============\n\nBody\n\nSecond\n------\n\n### Code `x` and *emph*\n");
+    assert(outline.Headings().size() == 3);
+    assert(outline.Headings()[0].level == 1);
+    assert(outline.Headings()[0].line == 0);
+    assert(outline.Headings()[0].text == "Setext Title");
+    assert(outline.Headings()[1].level == 2);
+    assert(outline.Headings()[1].line == 5);
+    assert(outline.Headings()[2].text == "Code x and emph");
+    assert(outline.Headings()[2].line == 8);
+}
+
 void TestHtmlEscape() {
     assert(nmf::EscapeHtmlText("<tag attr=\"&\">'") == "&lt;tag attr=&quot;&amp;&quot;&gt;&#39;");
 }
@@ -172,6 +184,7 @@ int main() {
     TestMarkdownRenderSourcepos();
     TestMarkdownRenderTaskListAndFootnotes();
     TestMarkdownOutline();
+    TestMarkdownOutlineSetextAndInline();
     TestHtmlEscape();
     TestBlockScrollSync();
     TestFeatureToggle();

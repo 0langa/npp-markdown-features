@@ -21,6 +21,7 @@ public:
     bool ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath, const ScrollTarget& scrollTarget);
     ScrollTarget Hide();
     ScrollTarget LastScrollTarget() const;
+    void ScrollToSourceLine(double sourceLine);
     void Resize();
     void Destroy();
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);

@@ -36,13 +36,14 @@ The first settings dialog should stay minimal:
 
 ## Development Status
 
-Version `0.1.0` builds a native x64 Notepad++ plugin DLL with:
+Version `0.2.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
 - rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
 - GitHub-flavored rendering via `cmark-gfm` (tables, task lists, strikethrough, autolinks, footnotes)
 - block-level scroll sync: toggling raw/rendered keeps your reading position both ways, using `data-sourcepos` source mapping with heading-anchor and ratio fallbacks
 - word-wrap-aware scroll mapping in the raw editor
+- **Document Outline** panel (`Ctrl+Shift+O`): docked heading tree with live updates while typing, filter box, and click-to-jump that also scrolls the rendered view; panel visibility persists across restarts; ATX and setext headings supported
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

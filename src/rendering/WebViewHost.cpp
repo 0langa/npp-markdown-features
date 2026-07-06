@@ -95,6 +95,14 @@ ScrollTarget WebViewHost::LastScrollTarget() const {
     return lastScrollTarget_;
 }
 
+void WebViewHost::ScrollToSourceLine(double sourceLine) {
+    if (!webView_) {
+        return;
+    }
+    pendingScrollTarget_ = ScrollTarget{lastScrollTarget_.ratio, {}, sourceLine};
+    ApplyPendingScroll();
+}
+
 void WebViewHost::Resize() {
     if (hostWindow_ == nullptr || parentScintilla_ == nullptr) {
         return;

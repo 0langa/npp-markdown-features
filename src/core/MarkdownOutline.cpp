@@ -2,8 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmark-gfm-core-extensions.h>
+#include <cmark-gfm.h>
 #include <map>
-#include <sstream>
 
 namespace nmf {
 namespace {
@@ -17,55 +18,80 @@ std::string TrimAscii(std::string value) {
     return std::string(begin, end);
 }
 
-bool IsAtxHeading(const std::string& line, int& level, std::string& text) {
-    size_t index = 0;
-    while (index < line.size() && line[index] == '#') {
-        ++index;
+std::string HeadingPlainText(cmark_node* heading) {
+    std::string text;
+    cmark_iter* iter = cmark_iter_new(heading);
+    cmark_event_type event;
+    while ((event = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
+        if (event != CMARK_EVENT_ENTER) {
+            continue;
+        }
+        cmark_node* node = cmark_iter_get_node(iter);
+        switch (cmark_node_get_type(node)) {
+            case CMARK_NODE_TEXT:
+            case CMARK_NODE_CODE:
+                if (const char* literal = cmark_node_get_literal(node)) {
+                    text += literal;
+                }
+                break;
+            case CMARK_NODE_SOFTBREAK:
+            case CMARK_NODE_LINEBREAK:
+                text += ' ';
+                break;
+            default:
+                break;
+        }
     }
-    if (index == 0 || index > 6 || index >= line.size() || std::isspace(static_cast<unsigned char>(line[index])) == 0) {
-        return false;
-    }
-    level = static_cast<int>(index);
-    text = TrimAscii(line.substr(index));
-    while (!text.empty() && text.back() == '#') {
-        text.pop_back();
-    }
-    text = TrimAscii(text);
-    return !text.empty();
+    cmark_iter_free(iter);
+    return TrimAscii(text);
 }
 
 }  // namespace
 
+// Parse with the same cmark-gfm configuration as the renderer so heading
+// lines always match the data-sourcepos values in the rendered HTML. This
+// also handles setext headings, fences, and CRLF exactly like the renderer.
 MarkdownOutline MarkdownOutline::Parse(const std::string& markdownUtf8) {
     MarkdownOutline outline;
     std::map<std::string, int> anchorCounts;
-    std::istringstream stream(markdownUtf8);
-    std::string line;
-    int lineNumber = 0;
-    bool fencedCode = false;
 
-    while (std::getline(stream, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
+    cmark_gfm_core_extensions_ensure_registered();
+    cmark_parser* parser = cmark_parser_new(CMARK_OPT_VALIDATE_UTF8 | CMARK_OPT_FOOTNOTES);
+    if (parser == nullptr) {
+        return outline;
+    }
+    for (const char* extensionName : {"table", "strikethrough", "tasklist", "autolink"}) {
+        if (cmark_syntax_extension* extension = cmark_find_syntax_extension(extensionName)) {
+            cmark_parser_attach_syntax_extension(parser, extension);
         }
-        const auto trimmed = TrimAscii(line);
-        if (trimmed.rfind("```", 0) == 0 || trimmed.rfind("~~~", 0) == 0) {
-            fencedCode = !fencedCode;
-            ++lineNumber;
-            continue;
-        }
-        if (!fencedCode) {
-            int level = 0;
-            std::string text;
-            if (IsAtxHeading(trimmed, level, text)) {
-                const auto base = SlugifyHeading(text, 0);
-                const int duplicate = anchorCounts[base]++;
-                outline.headings_.push_back({lineNumber, level, text, SlugifyHeading(text, duplicate)});
-            }
-        }
-        ++lineNumber;
+    }
+    cmark_parser_feed(parser, markdownUtf8.data(), markdownUtf8.size());
+    cmark_node* document = cmark_parser_finish(parser);
+    if (document == nullptr) {
+        cmark_parser_free(parser);
+        return outline;
     }
 
+    cmark_iter* iter = cmark_iter_new(document);
+    cmark_event_type event;
+    while ((event = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
+        cmark_node* node = cmark_iter_get_node(iter);
+        if (event != CMARK_EVENT_ENTER || cmark_node_get_type(node) != CMARK_NODE_HEADING) {
+            continue;
+        }
+        const auto text = HeadingPlainText(node);
+        if (text.empty()) {
+            continue;
+        }
+        const int level = cmark_node_get_heading_level(node);
+        const int line = cmark_node_get_start_line(node) - 1;  // outline lines are 0-based
+        const auto base = SlugifyHeading(text, 0);
+        const int duplicate = anchorCounts[base]++;
+        outline.headings_.push_back({line, level, text, SlugifyHeading(text, duplicate)});
+    }
+    cmark_iter_free(iter);
+    cmark_node_free(document);
+    cmark_parser_free(parser);
     return outline;
 }
 
