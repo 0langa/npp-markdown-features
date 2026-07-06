@@ -38,3 +38,4 @@ compile_commands.json
 
 .recall/
 .codex_memory/
+.handoff/

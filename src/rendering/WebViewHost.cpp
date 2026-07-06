@@ -4,8 +4,10 @@
 #include "rendering/WebViewUserDataFolder.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <shellapi.h>
 
 using Microsoft::WRL::Callback;
@@ -18,6 +20,18 @@ constexpr wchar_t kHostWindowClass[] = L"NppMarkdownFeaturesWebViewHost";
 
 std::wstring Utf8HtmlToWide(const std::string& html) {
     return Utf8ToWide(html);
+}
+
+// Anchor ids are generated slugs; keep the embedded JS literal safe regardless.
+std::wstring SanitizeAnchorForScript(const std::string& anchorId) {
+    std::string sanitized;
+    sanitized.reserve(anchorId.size());
+    for (const char ch : anchorId) {
+        if (std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '-' || ch == '_') {
+            sanitized.push_back(ch);
+        }
+    }
+    return Utf8ToWide(sanitized);
 }
 
 bool IsExternalUri(const std::wstring& uri) {
@@ -227,15 +241,39 @@ void WebViewHost::ApplyPendingScroll() {
     if (!webView_) {
         return;
     }
-    std::wstring script = L"(() => {";
-    if (!pendingScrollTarget_.anchorId.empty()) {
-        script += L"const anchor = document.getElementById('";
-        script += Utf8ToWide(pendingScrollTarget_.anchorId);
-        script += L"'); if (anchor) { anchor.scrollIntoView({ block: 'start' }); return true; }";
-    }
-    script += L"const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); window.scrollTo(0, max * ";
-    script += std::to_wstring(pendingScrollTarget_.ratio);
-    script += L"); return true; })();";
+    // Priority: fractional source line against data-sourcepos blocks, then
+    // heading anchor, then plain viewport ratio.
+    std::wstring script = L"(() => {\n";
+    script += L"const line = " + std::to_wstring(pendingScrollTarget_.sourceLine) + L";\n";
+    script += L"const anchorId = '" + SanitizeAnchorForScript(pendingScrollTarget_.anchorId) + L"';\n";
+    script += L"const ratio = " + std::to_wstring(std::clamp(pendingScrollTarget_.ratio, 0.0, 1.0)) + L";\n";
+    script += LR"JS(const pad = 8;
+if (line >= 1) {
+  let best = null;
+  for (const el of document.querySelectorAll('[data-sourcepos]')) {
+    const m = /^(\d+):\d+-(\d+):\d+$/.exec(el.getAttribute('data-sourcepos'));
+    if (!m) continue;
+    const s = +m[1];
+    const e = +m[2];
+    if (s <= line && (!best || s >= best.s)) best = { el, s, e };
+  }
+  if (best) {
+    const rect = best.el.getBoundingClientRect();
+    const span = best.e - best.s + 1;
+    const frac = Math.min(1, Math.max(0, (line - best.s) / span));
+    const top = window.scrollY + rect.top + rect.height * frac;
+    window.scrollTo(0, Math.max(0, top - pad));
+    return true;
+  }
+}
+if (anchorId) {
+  const anchor = document.getElementById(anchorId);
+  if (anchor) { anchor.scrollIntoView({ block: 'start' }); return true; }
+}
+const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+window.scrollTo(0, max * ratio);
+return true;
+})();)JS";
     webView_->ExecuteScript(script.c_str(), nullptr);
     lastScrollTarget_ = pendingScrollTarget_;
 }
@@ -244,30 +282,46 @@ void WebViewHost::CaptureScrollRatio() {
     if (!webView_) {
         return;
     }
+    // Capture the innermost data-sourcepos block crossing the viewport top and
+    // interpolate a fractional source line inside it; keep anchor and ratio as
+    // fallback channels for documents without sourcepos data.
     webView_->ExecuteScript(
-        L"(() => {"
-        L"const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);"
-        L"let current = '';"
-        L"for (const h of Array.from(document.querySelectorAll('[data-source-line]'))) {"
-        L"  if (h.getBoundingClientRect().top <= 8) current = h.id || '';"
-        L"}"
-        L"return { ratio: window.scrollY / max, anchorId: current };"
-        L"})();",
+        LR"JS((() => {
+const pad = 8;
+const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+let line = -1;
+let bestTop = -1e9;
+for (const el of document.querySelectorAll('[data-sourcepos]')) {
+  const rect = el.getBoundingClientRect();
+  if (rect.height <= 0) continue;
+  const m = /^(\d+):\d+-(\d+):\d+$/.exec(el.getAttribute('data-sourcepos'));
+  if (!m) continue;
+  if (rect.top <= pad && rect.bottom > pad && rect.top >= bestTop) {
+    bestTop = rect.top;
+    const s = +m[1];
+    const e = +m[2];
+    const frac = Math.min(1, Math.max(0, (pad - rect.top) / rect.height));
+    line = s + frac * (e - s + 1);
+  }
+}
+let anchorId = '';
+for (const h of document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]')) {
+  if (h.getBoundingClientRect().top <= pad) anchorId = h.id || anchorId;
+}
+return { ratio: window.scrollY / max, line: line, anchorId: anchorId };
+})();)JS",
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [this](HRESULT result, LPCWSTR jsonResult) -> HRESULT {
                 if (SUCCEEDED(result) && jsonResult != nullptr) {
-                    std::wstring json(jsonResult);
-                    const auto ratioKey = json.find(L"\"ratio\":");
-                    if (ratioKey != std::wstring::npos) {
-                        lastScrollTarget_.ratio = std::clamp(_wtof(json.c_str() + ratioKey + 8), 0.0, 1.0);
-                    }
-                    const auto anchorKey = json.find(L"\"anchorId\":\"");
-                    if (anchorKey != std::wstring::npos) {
-                        const auto anchorStart = anchorKey + 12;
-                        const auto anchorEnd = json.find(L"\"", anchorStart);
-                        if (anchorEnd != std::wstring::npos) {
-                            lastScrollTarget_.anchorId = WideToUtf8(json.substr(anchorStart, anchorEnd - anchorStart));
+                    try {
+                        const auto parsed = nlohmann::json::parse(WideToUtf8(jsonResult));
+                        if (parsed.is_object()) {
+                            lastScrollTarget_.ratio = std::clamp(parsed.value("ratio", 0.0), 0.0, 1.0);
+                            lastScrollTarget_.sourceLine = parsed.value("line", -1.0);
+                            lastScrollTarget_.anchorId = parsed.value("anchorId", std::string{});
                         }
+                    } catch (...) {
+                        // Keep the previous capture on malformed results.
                     }
                 }
                 return S_OK;

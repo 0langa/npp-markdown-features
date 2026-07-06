@@ -2,6 +2,7 @@
 
 #include "core/Strings.h"
 
+#include <functional>
 #include <utility>
 
 namespace nmf {
@@ -9,7 +10,7 @@ namespace nmf {
 MarkdownViewFeature::MarkdownViewFeature(
     ReadTextCallback readText,
     ReadViewportCallback readRawViewport,
-    ReadViewportCallback readRenderedViewport,
+    ReadRenderedTargetCallback readRenderedTarget,
     ReadFirstVisibleLineCallback readFirstVisibleLine,
     ShowHtmlCallback showHtml,
     HideCallback hide,
@@ -17,7 +18,7 @@ MarkdownViewFeature::MarkdownViewFeature(
     StatusCallback status)
     : readText_(std::move(readText)),
       readRawViewport_(std::move(readRawViewport)),
-      readRenderedViewport_(std::move(readRenderedViewport)),
+      readRenderedTarget_(std::move(readRenderedTarget)),
       readFirstVisibleLine_(std::move(readFirstVisibleLine)),
       showHtml_(std::move(showHtml)),
       hide_(std::move(hide)),
@@ -47,6 +48,7 @@ void MarkdownViewFeature::OnCommand(PluginCommand command, const ActiveDocument&
         if (renderedMode_) {
             const auto target = hide_();
             renderedMode_ = false;
+            hasRenderedDocument_ = false;
             if (IsMarkdown(document)) {
                 setRawViewport_(document, target, currentOutline_);
             }
@@ -59,20 +61,20 @@ void MarkdownViewFeature::OnCommand(PluginCommand command, const ActiveDocument&
         pendingRenderTarget_ = scrollSync_.RawToRendered(currentOutline_, readFirstVisibleLine_(document), readRawViewport_(document));
         hasPendingRenderTarget_ = true;
         renderedMode_ = true;
-        ApplyDocument(document, true, markdown);
+        ApplyDocument(document, RenderReason::Toggle, markdown);
         return;
     }
     if (command == PluginCommand::RefreshRenderedView) {
-        ApplyDocument(document, true);
+        ApplyDocument(document, RenderReason::Refresh);
     }
 }
 
 void MarkdownViewFeature::OnDocumentChanged(const ActiveDocument& document) {
-    ApplyDocument(document, false);
+    ApplyDocument(document, RenderReason::DocumentChanged);
 }
 
 void MarkdownViewFeature::OnFileSaved(const ActiveDocument& document) {
-    ApplyDocument(document, true);
+    ApplyDocument(document, RenderReason::Refresh);
 }
 
 bool MarkdownViewFeature::IsRenderedMode() const {
@@ -88,33 +90,48 @@ void MarkdownViewFeature::UpdateSettings(MarkdownViewSettings settings) {
     renderedMode_ = settings_.defaultMode == DisplayMode::Rendered;
 }
 
-void MarkdownViewFeature::ApplyDocument(const ActiveDocument& document, bool forceRender) {
-    ApplyDocument(document, forceRender, std::nullopt);
+const BlockScrollSyncStrategy& MarkdownViewFeature::ScrollSync() const {
+    return scrollSync_;
 }
 
-void MarkdownViewFeature::ApplyDocument(const ActiveDocument& document, bool forceRender, std::optional<std::string> knownMarkdown) {
+void MarkdownViewFeature::ApplyDocument(const ActiveDocument& document, RenderReason reason, std::optional<std::string> knownMarkdown) {
     if (!renderedMode_ || !IsMarkdown(document) || document.scintilla == nullptr) {
         hide_();
+        hasRenderedDocument_ = false;
         status_(L"Markdown Features: raw view");
-        return;
-    }
-
-    if (!forceRender) {
         return;
     }
 
     try {
         const auto markdown = knownMarkdown ? *knownMarkdown : readText_(document);
+        const auto markdownHash = std::hash<std::string>{}(markdown);
+        if (reason == RenderReason::DocumentChanged && hasRenderedDocument_ && document.path == lastRenderedPath_ && markdownHash == lastRenderedHash_) {
+            return;
+        }
+
         const auto rendered = renderer_.Render(markdown, document.path);
         currentOutline_ = rendered.outline;
-        const auto target = hasPendingRenderTarget_
-            ? pendingRenderTarget_
-            : scrollSync_.RawToRendered(currentOutline_, readFirstVisibleLine_(document), readRenderedViewport_(document));
+
+        ScrollTarget target;
+        if (hasPendingRenderTarget_) {
+            target = pendingRenderTarget_;
+        } else if (reason == RenderReason::Refresh && hasRenderedDocument_ && document.path == lastRenderedPath_) {
+            // Same document re-rendered: keep the rendered view where it is.
+            target = readRenderedTarget_(document);
+        } else {
+            // New document under the overlay: mirror its raw editor position.
+            target = scrollSync_.RawToRendered(currentOutline_, readFirstVisibleLine_(document), readRawViewport_(document));
+        }
         hasPendingRenderTarget_ = false;
+
         showHtml_(document.scintilla, rendered.documentHtml, document.path, target);
+        lastRenderedPath_ = document.path;
+        lastRenderedHash_ = markdownHash;
+        hasRenderedDocument_ = true;
         status_(L"Markdown Features: rendered view");
     } catch (...) {
         hide_();
+        hasRenderedDocument_ = false;
         status_(L"Markdown Features: render failed");
     }
 }

@@ -13,6 +13,7 @@ class MarkdownViewFeature final : public Feature {
 public:
     using ReadTextCallback = std::function<std::string(const ActiveDocument&)>;
     using ReadViewportCallback = std::function<double(const ActiveDocument&)>;
+    using ReadRenderedTargetCallback = std::function<ScrollTarget(const ActiveDocument&)>;
     using ReadFirstVisibleLineCallback = std::function<int(const ActiveDocument&)>;
     using ShowHtmlCallback = std::function<void(HWND, const std::string&, const std::wstring&, const ScrollTarget&)>;
     using HideCallback = std::function<ScrollTarget()>;
@@ -22,7 +23,7 @@ public:
     MarkdownViewFeature(
         ReadTextCallback readText,
         ReadViewportCallback readRawViewport,
-        ReadViewportCallback readRenderedViewport,
+        ReadRenderedTargetCallback readRenderedTarget,
         ReadFirstVisibleLineCallback readFirstVisibleLine,
         ShowHtmlCallback showHtml,
         HideCallback hide,
@@ -40,10 +41,16 @@ public:
     bool IsRenderedMode() const;
     const MarkdownViewSettings& Settings() const;
     void UpdateSettings(MarkdownViewSettings settings);
+    const BlockScrollSyncStrategy& ScrollSync() const;
 
 private:
-    void ApplyDocument(const ActiveDocument& document, bool forceRender);
-    void ApplyDocument(const ActiveDocument& document, bool forceRender, std::optional<std::string> knownMarkdown);
+    enum class RenderReason {
+        Toggle,
+        DocumentChanged,
+        Refresh,
+    };
+
+    void ApplyDocument(const ActiveDocument& document, RenderReason reason, std::optional<std::string> knownMarkdown = std::nullopt);
     bool IsMarkdown(const ActiveDocument& document) const;
 
     MarkdownViewSettings settings_{};
@@ -51,11 +58,14 @@ private:
     ScrollTarget pendingRenderTarget_{};
     bool hasPendingRenderTarget_{false};
     MarkdownRenderer renderer_{};
-    SectionScrollSyncStrategy scrollSync_{};
+    BlockScrollSyncStrategy scrollSync_{};
     MarkdownOutline currentOutline_{};
+    std::wstring lastRenderedPath_{};
+    size_t lastRenderedHash_{0};
+    bool hasRenderedDocument_{false};
     ReadTextCallback readText_;
     ReadViewportCallback readRawViewport_;
-    ReadViewportCallback readRenderedViewport_;
+    ReadRenderedTargetCallback readRenderedTarget_;
     ReadFirstVisibleLineCallback readFirstVisibleLine_;
     ShowHtmlCallback showHtml_;
     HideCallback hide_;

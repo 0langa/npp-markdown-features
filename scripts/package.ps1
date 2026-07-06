@@ -6,7 +6,11 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$version = '0.1.0'
+$cmakeLists = Get-Content -LiteralPath (Join-Path $repoRoot 'CMakeLists.txt') -Raw
+if ($cmakeLists -notmatch 'project\(NppMarkdownFeatures VERSION (\d+\.\d+\.\d+)') {
+    throw 'Could not read project version from CMakeLists.txt'
+}
+$version = $Matches[1]
 $dll = Join-Path $repoRoot "build\bin\$Configuration\NppMarkdownFeatures.dll"
 if (-not (Test-Path $dll)) {
     $dll = Join-Path $repoRoot 'build\NppMarkdownFeatures.dll'

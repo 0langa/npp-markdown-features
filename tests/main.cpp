@@ -1,4 +1,5 @@
 #include "core/MarkdownViewFeature.h"
+#include "core/ScrollSync.h"
 #include "core/SettingsStore.h"
 #include "core/Strings.h"
 #include "rendering/MarkdownRenderer.h"
@@ -44,10 +45,30 @@ void TestSettingsDefaultsAndRoundTrip() {
 void TestMarkdownRender() {
     nmf::MarkdownRenderer renderer;
     const auto rendered = renderer.Render("# Title\n\n- one\n- two\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```cpp\nint x = 1;\n```\n", L"C:\\tmp\\test.md");
-    assert(rendered.bodyHtml.find("<h1 id=\"nmf-heading-title\" data-source-line=\"0\">Title</h1>") != std::string::npos);
-    assert(rendered.bodyHtml.find("<li>one</li>") != std::string::npos);
-    assert(rendered.bodyHtml.find("<table>") != std::string::npos);
+    assert(rendered.bodyHtml.find("<h1 id=\"nmf-heading-title\" data-sourcepos=\"1:1-") != std::string::npos);
+    assert(rendered.bodyHtml.find("one</li>") != std::string::npos);
+    assert(rendered.bodyHtml.find("<table") != std::string::npos);
+    assert(rendered.bodyHtml.find("language-cpp") != std::string::npos);
+    assert(rendered.bodyHtml.find("<p data-sourcepos=") == std::string::npos);  // no loose paragraphs in this input
     assert(rendered.documentHtml.find("<base href=\"file:///C:/tmp/\">") != std::string::npos);
+}
+
+void TestMarkdownRenderSourcepos() {
+    nmf::MarkdownRenderer renderer;
+    const auto rendered = renderer.Render("# One\n\nParagraph here.\n\n> quote\n", L"");
+    assert(rendered.bodyHtml.find("data-sourcepos=\"1:1-") != std::string::npos);
+    assert(rendered.bodyHtml.find("<p data-sourcepos=\"3:1-") != std::string::npos);
+    assert(rendered.bodyHtml.find("<blockquote data-sourcepos=\"5:1-") != std::string::npos);
+}
+
+void TestMarkdownRenderTaskListAndFootnotes() {
+    nmf::MarkdownRenderer renderer;
+    const auto tasks = renderer.Render("- [x] done\n- [ ] todo\n", L"");
+    assert(tasks.bodyHtml.find("type=\"checkbox\"") != std::string::npos);
+    assert(tasks.bodyHtml.find("checked") != std::string::npos);
+
+    const auto notes = renderer.Render("Hi[^1]\n\n[^1]: A note\n", L"");
+    assert(notes.bodyHtml.find("footnote") != std::string::npos);
 }
 
 void TestMarkdownOutline() {
@@ -65,23 +86,43 @@ void TestHtmlEscape() {
     assert(nmf::EscapeHtmlText("<tag attr=\"&\">'") == "&lt;tag attr=&quot;&amp;&quot;&gt;&#39;");
 }
 
+void TestBlockScrollSync() {
+    const auto outline = nmf::MarkdownOutline::Parse("# One\n\ntext\n\n## Two\n\nmore\n");
+    const nmf::BlockScrollSyncStrategy sync;
+
+    const auto target = sync.RawToRendered(outline, 5, 0.4);
+    assert(target.sourceLine == 6.0);
+    assert(target.anchorId == "nmf-heading-two");
+    assert(target.ratio == 0.4);
+
+    const nmf::ScrollTarget lineCaptured{0.9, "", 12.7};
+    assert(sync.RenderedToRawLine(lineCaptured, outline) == 11);
+
+    const nmf::ScrollTarget anchorOnly{0.9, "nmf-heading-two", -1.0};
+    assert(sync.RenderedToRawLine(anchorOnly, outline) == 4);
+
+    const nmf::ScrollTarget ratioOnly{0.9, "missing", -1.0};
+    assert(sync.RenderedToRawLine(ratioOnly, outline) == -1);
+}
+
 void TestFeatureToggle() {
     bool hidden = false;
     int shown = 0;
     std::string html;
+    nmf::ScrollTarget lastShownTarget{};
     nmf::MarkdownViewFeature feature(
         [](const nmf::ActiveDocument&) { return std::string("# Hello"); },
         [](const nmf::ActiveDocument&) { return 0.4; },
-        [](const nmf::ActiveDocument&) { return 0.7; },
+        [](const nmf::ActiveDocument&) { return nmf::ScrollTarget{0.55, "", 3.0}; },
         [](const nmf::ActiveDocument&) { return 0; },
-        [&](HWND, const std::string& rendered, const std::wstring&, const nmf::ScrollTarget& target) {
+        [&](HWND, const std::string& rendered, const std::wstring&, const nmf::ScrollTarget& scrollTarget) {
             ++shown;
             html = rendered;
-            assert(target.anchorId == "nmf-heading-hello");
+            lastShownTarget = scrollTarget;
         },
         [&]() {
             hidden = true;
-            return nmf::ScrollTarget{0.6, "nmf-heading-hello"};
+            return nmf::ScrollTarget{0.6, "nmf-heading-hello", 2.0};
         },
         [](const nmf::ActiveDocument&, const nmf::ScrollTarget&, const nmf::MarkdownOutline&) {},
         [](const std::wstring&) {});
@@ -98,7 +139,18 @@ void TestFeatureToggle() {
     feature.OnCommand(nmf::PluginCommand::ToggleRenderedView, markdown);
     assert(feature.IsRenderedMode());
     assert(shown == 1);
-    assert(html.find("<h1>Hello</h1>") != std::string::npos);
+    assert(html.find("Hello</h1>") != std::string::npos);
+    assert(lastShownTarget.anchorId == "nmf-heading-hello");
+    assert(lastShownTarget.sourceLine == 1.0);
+
+    // Re-activating the same unchanged document must not re-render.
+    feature.OnDocumentChanged(markdown);
+    assert(shown == 1);
+
+    // Saving re-renders the same document but keeps the rendered position.
+    feature.OnFileSaved(markdown);
+    assert(shown == 2);
+    assert(lastShownTarget.sourceLine == 3.0);
 
     feature.OnDocumentChanged(text);
     assert(hidden);
@@ -117,8 +169,11 @@ int main() {
     TestExtensionDetection();
     TestSettingsDefaultsAndRoundTrip();
     TestMarkdownRender();
+    TestMarkdownRenderSourcepos();
+    TestMarkdownRenderTaskListAndFootnotes();
     TestMarkdownOutline();
     TestHtmlEscape();
+    TestBlockScrollSync();
     TestFeatureToggle();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";

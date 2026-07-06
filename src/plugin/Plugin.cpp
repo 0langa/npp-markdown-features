@@ -88,7 +88,7 @@ void EnsureInitialized() {
             return nmf::npp::ScintillaViewportRatio(document.scintilla);
         },
         [](const nmf::ActiveDocument&) {
-            return g_webView.LastScrollTarget().ratio;
+            return g_webView.LastScrollTarget();
         },
         [](const nmf::ActiveDocument& document) {
             return nmf::npp::ScintillaFirstVisibleLine(document.scintilla);
@@ -100,11 +100,11 @@ void EnsureInitialized() {
             return g_webView.Hide();
         },
         [](const nmf::ActiveDocument& document, const nmf::ScrollTarget& target, const nmf::MarkdownOutline& outline) {
-            if (!target.anchorId.empty()) {
-                if (const auto heading = outline.HeadingByAnchor(target.anchorId)) {
-                    nmf::npp::SetScintillaFirstVisibleLine(document.scintilla, heading->line);
-                    return;
-                }
+            const nmf::BlockScrollSyncStrategy sync;
+            const int docLine = sync.RenderedToRawLine(target, outline);
+            if (docLine >= 0) {
+                nmf::npp::SetScintillaFirstVisibleLine(document.scintilla, docLine);
+                return;
             }
             nmf::npp::SetScintillaViewportRatio(document.scintilla, target.ratio);
         },
@@ -140,12 +140,12 @@ void OpenSettings() {
     }
 }
 
-void SetCommand(int index, const wchar_t* name, nmf::npp::PFUNCPLUGINCMD callback, bool checked = false) {
+void SetCommand(int index, const wchar_t* name, nmf::npp::PFUNCPLUGINCMD callback, nmf::npp::ShortcutKey* shortcut = nullptr, bool checked = false) {
     wcsncpy_s(g_funcItems[index]._itemName, name, _TRUNCATE);
     g_funcItems[index]._pFunc = callback;
     g_funcItems[index]._cmdID = 0;
     g_funcItems[index]._init2Check = checked;
-    g_funcItems[index]._pShKey = nullptr;
+    g_funcItems[index]._pShKey = shortcut;
 }
 
 void RegisterCommands() {
@@ -153,7 +153,8 @@ void RegisterCommands() {
     if (registered) {
         return;
     }
-    SetCommand(kToggleIndex, L"Toggle Rendered View", ToggleRenderedView);
+    static nmf::npp::ShortcutKey toggleShortcut{true, false, true, 'M'};
+    SetCommand(kToggleIndex, L"Toggle Rendered View", ToggleRenderedView, &toggleShortcut);
     SetCommand(kSettingsIndex, L"Settings...", OpenSettings);
     registered = true;
 }

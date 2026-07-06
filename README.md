@@ -39,8 +39,10 @@ The first settings dialog should stay minimal:
 Version `0.1.0` builds a native x64 Notepad++ plugin DLL with:
 
 - `Plugins > Markdown Features` menu
-- rendered/raw Markdown toggle
-- manual refresh command
+- rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
+- GitHub-flavored rendering via `cmark-gfm` (tables, task lists, strikethrough, autolinks, footnotes)
+- block-level scroll sync: toggling raw/rendered keeps your reading position both ways, using `data-sourcepos` source mapping with heading-anchor and ratio fallbacks
+- word-wrap-aware scroll mapping in the raw editor
 - minimal persisted settings dialog
 - WebView2 rendered Markdown overlay
 - core unit tests

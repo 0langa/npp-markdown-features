@@ -84,7 +84,10 @@ int ScintillaFirstVisibleLine(HWND scintilla) {
     if (scintilla == nullptr) {
         return 0;
     }
-    return static_cast<int>(::SendMessage(scintilla, SCI_GETFIRSTVISIBLELINE, 0, 0));
+    // SCI_GETFIRSTVISIBLELINE reports display lines; with word wrap or folding
+    // these diverge from document lines, which is what source mapping needs.
+    const auto displayLine = ::SendMessage(scintilla, SCI_GETFIRSTVISIBLELINE, 0, 0);
+    return static_cast<int>(::SendMessage(scintilla, SCI_DOCLINEFROMVISIBLE, displayLine, 0));
 }
 
 void SetScintillaViewportRatio(HWND scintilla, double ratio) {
@@ -104,8 +107,9 @@ void SetScintillaFirstVisibleLine(HWND scintilla, int line) {
     if (scintilla == nullptr) {
         return;
     }
+    const auto displayLine = static_cast<int>(::SendMessage(scintilla, SCI_VISIBLEFROMDOCLINE, line, 0));
     const auto current = static_cast<int>(::SendMessage(scintilla, SCI_GETFIRSTVISIBLELINE, 0, 0));
-    ::SendMessage(scintilla, SCI_LINESCROLL, 0, line - current);
+    ::SendMessage(scintilla, SCI_LINESCROLL, 0, displayLine - current);
 }
 
 }  // namespace nmf::npp

@@ -2,17 +2,14 @@
 
 #include "core/Strings.h"
 
+#include <cmark-gfm-core-extensions.h>
+#include <cmark-gfm.h>
+#include <cstdlib>
 #include <filesystem>
-#include <md4c-html.h>
 #include <stdexcept>
 
 namespace nmf {
 namespace {
-
-void AppendHtml(const MD_CHAR* text, MD_SIZE size, void* userData) {
-    auto* output = static_cast<std::string*>(userData);
-    output->append(text, text + size);
-}
 
 std::string FileUriFromDirectory(const std::wstring& sourcePath) {
     if (sourcePath.empty()) {
@@ -32,17 +29,20 @@ std::string FileUriFromDirectory(const std::wstring& sourcePath) {
     return "file:///" + uri;
 }
 
+// cmark emits data-sourcepos="<startline>:<startcol>-<endline>:<endcol>" with
+// 1-based lines; outline lines are 0-based, so heading.line + 1 keys the match.
 std::string AddHeadingAnchors(std::string body, const MarkdownOutline& outline) {
     size_t searchFrom = 0;
     for (const auto& heading : outline.Headings()) {
-        const std::string tag = "<h" + std::to_string(heading.level) + ">";
+        const std::string openTag = "<h" + std::to_string(heading.level);
+        const std::string tag = openTag + " data-sourcepos=\"" + std::to_string(heading.line + 1) + ":";
         const auto position = body.find(tag, searchFrom);
         if (position == std::string::npos) {
             continue;
         }
-        const std::string replacement = "<h" + std::to_string(heading.level) + " id=\"" + EscapeHtmlText(heading.anchorId) + "\" data-source-line=\"" + std::to_string(heading.line) + "\">";
-        body.replace(position, tag.size(), replacement);
-        searchFrom = position + replacement.size();
+        const std::string idAttribute = " id=\"" + EscapeHtmlText(heading.anchorId) + "\"";
+        body.insert(position + openTag.size(), idAttribute);
+        searchFrom = position + tag.size() + idAttribute.size();
     }
     return body;
 }
@@ -78,13 +78,30 @@ std::string EscapeHtmlText(const std::string& text) {
 }
 
 RenderedMarkdown MarkdownRenderer::Render(const std::string& markdownUtf8, const std::wstring& sourcePath) const {
-    std::string body;
-    constexpr unsigned parserFlags = MD_DIALECT_GITHUB | MD_FLAG_TABLES | MD_FLAG_TASKLISTS | MD_FLAG_STRIKETHROUGH;
-    constexpr unsigned rendererFlags = MD_HTML_FLAG_SKIP_UTF8_BOM;
-    const int result = md_html(markdownUtf8.data(), static_cast<MD_SIZE>(markdownUtf8.size()), AppendHtml, &body, parserFlags, rendererFlags);
-    if (result != 0) {
+    cmark_gfm_core_extensions_ensure_registered();
+
+    const int options = CMARK_OPT_SOURCEPOS | CMARK_OPT_UNSAFE | CMARK_OPT_FOOTNOTES | CMARK_OPT_VALIDATE_UTF8;
+    cmark_parser* parser = cmark_parser_new(options);
+    if (parser == nullptr) {
+        throw std::runtime_error("Markdown parser could not be created");
+    }
+    for (const char* extensionName : {"table", "strikethrough", "tasklist", "autolink"}) {
+        if (cmark_syntax_extension* extension = cmark_find_syntax_extension(extensionName)) {
+            cmark_parser_attach_syntax_extension(parser, extension);
+        }
+    }
+    cmark_parser_feed(parser, markdownUtf8.data(), markdownUtf8.size());
+    cmark_node* document = cmark_parser_finish(parser);
+    if (document == nullptr) {
+        cmark_parser_free(parser);
         throw std::runtime_error("Markdown rendering failed");
     }
+    char* html = cmark_render_html(document, options, cmark_parser_get_syntax_extensions(parser));
+    std::string body(html != nullptr ? html : "");
+    std::free(html);
+    cmark_node_free(document);
+    cmark_parser_free(parser);
+
     const auto outline = MarkdownOutline::Parse(markdownUtf8);
     body = AddHeadingAnchors(std::move(body), outline);
     return {body, BuildDocument(body, sourcePath), outline};
@@ -124,12 +141,16 @@ th, td { border: 1px solid #d7dce2; padding: 6px 9px; }
 blockquote { margin-left: 0; padding-left: 1em; border-left: 4px solid #c7ced8; color: #555; }
 img { max-width: 100%; height: auto; }
 a { color: #0b57d0; }
+li.task-list-item { list-style-type: none; }
+li.task-list-item input[type="checkbox"] { margin: 0 .45em .1em -1.35em; vertical-align: middle; }
+section.footnotes { margin-top: 2em; padding-top: .75em; border-top: 1px solid #d7dce2; font-size: .92em; }
 @media (prefers-color-scheme: dark) {
   body { color: #e6e6e6; background: #1f1f1f; }
   a { color: #8ab4f8; }
   pre, code { background: #2b2f36; }
   th, td, h1, pre { border-color: #454b55; }
   blockquote { border-left-color: #5f6670; color: #c8c8c8; }
+  section.footnotes { border-top-color: #454b55; }
 }
 </style></head><body>)";
     document += bodyHtml;

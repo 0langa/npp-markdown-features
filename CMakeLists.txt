@@ -13,12 +13,15 @@ endif()
 include(FetchContent)
 include(CTest)
 
-set(BUILD_MD2HTML_EXECUTABLE OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+set(CMARK_TESTS OFF CACHE BOOL "" FORCE)
+set(CMARK_SHARED OFF CACHE BOOL "" FORCE)
+set(CMARK_STATIC ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
-  md4c
-  GIT_REPOSITORY https://github.com/mity/md4c.git
-  GIT_TAG release-0.5.3
+  cmark-gfm
+  GIT_REPOSITORY https://github.com/github/cmark-gfm.git
+  GIT_TAG 0.29.0.gfm.13
 )
 
 FetchContent_Declare(
@@ -26,7 +29,7 @@ FetchContent_Declare(
   URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
 )
 
-FetchContent_MakeAvailable(md4c nlohmann_json)
+FetchContent_MakeAvailable(cmark-gfm nlohmann_json)
 
 set(WEBVIEW2_VERSION "1.0.4022.49" CACHE STRING "Microsoft.Web.WebView2 NuGet version")
 set(WEBVIEW2_NUGET_DIR "${CMAKE_BINARY_DIR}/_deps/nuget")
@@ -67,9 +70,18 @@ add_library(nmf_core
   src/rendering/MarkdownRenderer.cpp
   src/rendering/WebViewUserDataFolder.cpp
 )
-target_include_directories(nmf_core PUBLIC src)
-target_link_libraries(nmf_core PUBLIC md4c-html nlohmann_json::nlohmann_json)
-target_compile_definitions(nmf_core PUBLIC UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_include_directories(nmf_core PUBLIC
+  src
+  "${cmark-gfm_SOURCE_DIR}/src"
+  "${cmark-gfm_BINARY_DIR}/src"
+  "${cmark-gfm_SOURCE_DIR}/extensions"
+  "${cmark-gfm_BINARY_DIR}/extensions"
+)
+target_link_libraries(nmf_core PUBLIC libcmark-gfm_static libcmark-gfm-extensions_static nlohmann_json::nlohmann_json)
+target_compile_definitions(nmf_core PUBLIC
+  UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN
+  CMARK_GFM_STATIC_DEFINE CMARK_GFM_EXTENSIONS_STATIC_DEFINE
+)
 
 add_library(NppMarkdownFeatures SHARED
   src/plugin/Plugin.cpp
