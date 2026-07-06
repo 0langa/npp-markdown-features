@@ -1,160 +1,48 @@
 # npp-markdown-features
 
-A Notepad++ plugin project for improving the Markdown authoring experience in Notepad++.
+An all-in-one Markdown plugin for Notepad++ — rendering, navigation, editing assistance, tables, links, export, and cleanup in a single native plugin with one menu and one settings file.
 
-The first goal is a program-wide Markdown display toggle: when editing Markdown files, the user should be able to switch between the normal raw text editor and a rendered Markdown view from a menu item, toolbar button, and shortcut. The rendered view should use the main editor area rather than a permanent split view or docked preview panel.
+Version **1.0.0** · Windows x64 · MIT licensed · requires the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11).
 
-## Project Direction
+## The ten features
 
-This repository is intended to grow into a bundled Markdown utility plugin instead of a collection of separate single-purpose plugins. The first version should establish the plugin shell, settings structure, and UI conventions so future Markdown-specific features have a clear home.
+1. **Rendered Markdown view** — toggle between raw editing and a rendered GitHub-flavored view right in the editor area (toolbar button, menu, `Ctrl+Shift+M`). Tables, task lists, strikethrough, autolinks, footnotes. Block-level scroll sync keeps your reading position exact in both directions (word-wrap aware, `data-sourcepos` mapping with heading/ratio fallbacks). External links open in your browser; page scripts are always disabled, so a Markdown file can never run JavaScript.
+2. **Document Outline panel** (`Ctrl+Shift+O`) — docked heading tree with live updates while you type, a filter box, and click-to-jump that also scrolls the rendered view. ATX and setext headings; visibility persists across restarts; follows the Notepad++ dark mode.
+3. **Smart list editing** — Enter continues bullets, numbered lists (incl. zero-padded and `1)` styles), task items, and blockquotes; Enter on an empty item ends the list; ordered lists renumber automatically on insertion; `Renumber List` fixes any block on demand; `Toggle Task Checkbox` (`Ctrl+Shift+X`) checks/unchecks/converts, selections included.
+4. **Table tools** — `Format Table` (`Ctrl+Shift+T`) pretty-prints with alignment-aware padding (escaped pipes and UTF-8 widths handled) and scaffolds new tables from a lone header line; Tab/Shift+Tab hop between cells with reformatting on the way; Tab in the last cell appends a row; insert/delete columns; cycle column alignment.
+5. **Formatting commands** — Bold/Italic/Strikethrough/Inline Code toggles (`Ctrl+Alt+B/I/U/C`) that operate on the selection or word at the caret and unwrap when already applied; heading level up/down; blockquote toggle (`Ctrl+Alt+Q`); code fence insertion (`Ctrl+Alt+F`). The plugin menu is grouped into Format / Lists / Table / Links / Export submenus.
+6. **Link & image tooling** — paste a URL over selected text to create `[text](url)`; Insert Link (`Ctrl+Alt+L`) / Insert Image scaffolds; Follow Link (`Ctrl+Alt+G`) opens URLs in the browser, jumps to `#anchors`, and opens relative file links in Notepad++ (reference links and `%20` decoding included); Check Links reports every broken local file link or anchor with line numbers.
+7. **Export & copy** — Export HTML writes a standalone styled document; Copy as HTML puts real `HTML Format` data on the clipboard for rich pasting into Word/Outlook/mail; Print Rendered View opens the WebView2 print dialog (print or save as PDF).
+8. **TOC & document cleanup** — Insert/Update TOC maintains a marker-delimited table of contents with GitHub-style slugs; Format Document normalizes trailing whitespace (hard breaks preserved), blank lines, bullet markers, spacing around headings/fences, and reformats every table — never touching fenced code. Both idempotent, single-undo.
+9. **Live stats & breadcrumb** — word count, characters, reading time, and the current heading path in the status bar as you type and move; selection-aware; YAML frontmatter and code excluded from counts. Frontmatter renders as a tidy collapsible block instead of broken markup.
+10. **Rendered-view polish** — syntax highlighting in code blocks via an embedded highlight.js (injected host-side; page scripts stay disabled), light/dark/auto themes, an optional custom CSS file, and Ctrl+wheel zoom that persists across sessions.
 
-## First Version Plan
+All editing assists apply only to Markdown files (configurable extensions), group as single undo actions, and can be switched off via the `Smart Typing` menu toggle.
 
-1. Scaffold a native Notepad++ plugin from the C++ plugin template.
-2. Register a `Markdown Features` plugin menu with:
-   - `Toggle Rendered View`
-   - `Settings`
-   - `About`
-3. Add a toolbar button for the rendered/raw Markdown toggle.
-4. Detect Markdown buffers by file extension and current language where possible.
-5. Implement raw mode by leaving the normal Scintilla editor visible and editable.
-6. Implement rendered mode as a read-only WebView2 overlay in the main editor area.
-7. Render Markdown through a small, well-maintained parser such as `md4c` or `cmark-gfm`.
-8. Keep the source buffer untouched; rendered mode must never replace document text with generated HTML.
-9. Persist user settings for default mode, supported extensions, and live refresh behavior.
-10. Add a repeatable build and install path for local Notepad++ testing.
+## Install
 
-## Initial Settings Shape
+1. Close Notepad++.
+2. Download the latest release zip and copy `plugins/NppMarkdownFeatures/NppMarkdownFeatures.dll` into `C:\Program Files\Notepad++\plugins\NppMarkdownFeatures\`.
+3. Start Notepad++ — you'll find everything under `Plugins > Markdown Features`.
 
-The first settings dialog should stay minimal:
+WebView2 profile data is stored under `%LOCALAPPDATA%\NppMarkdownFeatures\WebView2`; settings live in the Notepad++ plugin config directory as `NppMarkdownFeatures\settings.json`.
 
-- `Default Markdown display`: raw text or rendered
-- `Toggle behavior`: per-buffer or global
-- `Live preview refresh`: on save or while typing
-- `Markdown file extensions`: configurable list, defaulting to `.md` and `.markdown`
-- `Renderer`: internal parser initially, with room for future options
+## Settings
 
-## Development Status
-
-Version `0.9.0` builds a native x64 Notepad++ plugin DLL with:
-
-- `Plugins > Markdown Features` menu
-- rendered/raw Markdown toggle (toolbar button, menu, `Ctrl+Shift+M`)
-- GitHub-flavored rendering via `cmark-gfm` (tables, task lists, strikethrough, autolinks, footnotes)
-- block-level scroll sync: toggling raw/rendered keeps your reading position both ways, using `data-sourcepos` source mapping with heading-anchor and ratio fallbacks
-- word-wrap-aware scroll mapping in the raw editor
-- **Document Outline** panel (`Ctrl+Shift+O`): docked heading tree with live updates while typing, filter box, and click-to-jump that also scrolls the rendered view; panel visibility persists across restarts; ATX and setext headings supported
-- **Smart list editing** (toggleable via `Plugins > Markdown Features > Smart List Editing`):
-  - Enter continues bullet lists (`-`, `*`, `+`), ordered lists (`1.`, `1)`, zero-padded numbers), task lists, and blockquotes — indentation preserved, remainder of a split line carried over
-  - Enter on an empty item removes the marker and ends the list
-  - ordered lists renumber automatically when items are inserted; `Renumber List` fixes any block on demand (nesting-aware, keeps the starting number)
-  - `Toggle Task Checkbox` (`Ctrl+Shift+X`): checks/unchecks tasks, adds boxes to plain list items, converts plain lines or selections into task items
-- **Table tools**:
-  - `Format Table` (`Ctrl+Shift+T`): pretty-prints the pipe table under the caret (alignment-aware padding, escaped `\|` respected, UTF-8 cell widths); on a lone `| Header |` line it scaffolds the delimiter row and an empty body row
-  - Tab / Shift+Tab move between cells (reformatting as you go); Tab in the last cell appends a new row — works when Notepad++ inserts tab characters (default)
-  - `Table: Insert Column` / `Table: Delete Column` at the caret position
-  - `Table: Cycle Column Alignment` steps the current column through none → left → center → right
-  - smart Tab is part of the `Smart Typing (Lists, Tables)` toggle
-- **Formatting commands** (under `Markdown Features > Format`; the plugin menu is organized into `Format` / `Lists` / `Table` submenus):
-  - Bold (`Ctrl+Alt+B`), Italic (`Ctrl+Alt+I`), Strikethrough (`Ctrl+Alt+U`), Inline Code (`Ctrl+Alt+C`) — toggle on the selection or the word at the caret, unwrap when already wrapped, bold/italic edges disambiguated
-  - Heading Level Up / Down for the current line or all selected lines
-  - Toggle Blockquote (`Ctrl+Alt+Q`) adds/removes one `> ` level across the selection
-  - Insert Code Fence (`Ctrl+Alt+F`) wraps the selected lines in ``` fences or inserts an empty block, caret on the language position
-- **Link & image tooling** (`Markdown Features > Links`):
-  - paste a URL over selected text (`Ctrl+V`) and it becomes `[selection](url)` automatically (part of Smart Typing)
-  - Insert Link (`Ctrl+Alt+L`) / Insert Image scaffolds with the caret in the right slot
-  - Follow Link (`Ctrl+Alt+G`): opens `https://` links in the browser, `#anchors` jump to the matching heading, relative file links open in Notepad++ (with `%20` decoding and `[ref][id]` resolution)
-  - Check Links: validates every local file link and heading anchor in the document and opens a report listing broken ones (external URLs are counted but not fetched)
-- **Export** (`Markdown Features > Export`):
-  - `Export HTML...` writes a standalone styled HTML file (save dialog, inline CSS, relative images resolve via `<base>`)
-  - `Copy as HTML` puts the rendered selection (or whole document) on the clipboard as `HTML Format` — paste rich text straight into Word, Outlook, or Gmail — plus the raw HTML as plain text
-  - `Print Rendered View...` opens the WebView2 print dialog (print or save as PDF); renders first if you're in raw mode
-- **TOC & document cleanup** (in the Format submenu):
-  - `Insert/Update TOC` maintains a table of contents between `<!-- toc -->` / `<!-- /toc -->` markers (inserted at the caret on first run) — GitHub-style slugs incl. duplicate suffixes, a single leading H1 is treated as the title, idempotent updates
-  - `Format Document` normalizes conservatively: trims trailing whitespace (two-space hard breaks preserved), collapses blank-line runs, guarantees blank lines around headings and fences, unifies bullet markers to `-`, and reformats every table — fenced code blocks are never touched
-- **Live document stats & breadcrumb** in the status bar: word count, character count, reading time (~200 wpm), and the current heading path (`Alpha › Beta`), updating as you type and move; select text to see selection stats instead; YAML frontmatter and fenced code are excluded from counts (skipped for files > 4 MB)
-- **YAML frontmatter awareness**: frontmatter is excluded from stats and shown in the rendered view as a collapsible "Front matter" block instead of broken markup, without disturbing scroll sync
-- minimal persisted settings dialog
-- WebView2 rendered Markdown overlay
-- core unit tests
-
-WebView2 profile data is stored under the current user's local app data, not under the Notepad++ installation directory:
-
-```text
-%LOCALAPPDATA%\NppMarkdownFeatures\WebView2
-```
+`Plugins > Markdown Features > Settings...` covers default display mode, Markdown extensions, preview theme (auto/light/dark), and a custom CSS file. The JSON settings file additionally holds fine-grained switches (`listEditing.smartEnter`, `tableEditing.smartTab`, `linkTools.pasteUrlAsLink`, `markdownView.zoom`).
 
 ## Build
 
-Requirements:
-
-- Windows x64
-- CMake
-- Ninja
-- NuGet CLI
-- Visual Studio C++ x64 build tools
-- Microsoft Edge WebView2 Runtime
+Requirements: Windows x64, CMake, Ninja, NuGet CLI, Visual Studio C++ x64 build tools, WebView2 Runtime.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Configuration Release
-```
-
-Build output:
-
-```text
-build\bin\Release\NppMarkdownFeatures.dll
-```
-
-## Package
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -Configuration Release
-```
-
-Package output:
-
-```text
-dist\NppMarkdownFeatures-v0.1.0-win-x64.zip
-```
-
-## Install Locally
-
-Close Notepad++ first.
-
-```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Configuration Release     # build + unit tests
+powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -Configuration Release   # release zip in dist\
 powershell -ExecutionPolicy Bypass -File .\scripts\install-local.ps1 -Configuration Release
 ```
 
-If the shell is not elevated, Program Files will require admin rights. Run this from an elevated PowerShell if the script cannot verify the copy:
-
-```powershell
-$ErrorActionPreference='Stop'; New-Item -ItemType Directory -Force -Path "C:\Program Files\Notepad++\plugins\NppMarkdownFeatures" | Out-Null; Copy-Item -LiteralPath "C:\Users\Julius\source\repos\npp-markdown-features\build\bin\Release\NppMarkdownFeatures.dll" -Destination "C:\Program Files\Notepad++\plugins\NppMarkdownFeatures\NppMarkdownFeatures.dll" -Force
-```
-
-Expected installed DLL:
-
-```text
-C:\Program Files\Notepad++\plugins\NppMarkdownFeatures\NppMarkdownFeatures.dll
-```
-
-## Manual Verification
-
-1. Close Notepad++.
-2. Build Release.
-3. Install the DLL into `C:\Program Files\Notepad++\plugins\NppMarkdownFeatures`.
-4. Start Notepad++ normally.
-5. Confirm `Plugins > Markdown Features` exists.
-6. Confirm the toolbar icon appears.
-7. Open or create `test.md` with headings, lists, task lists, table, fenced code, link, and local image.
-8. Use `Plugins > Markdown Features > Toggle Rendered View`; the editor area should switch to rendered Markdown without a docked or split panel.
-9. Toggle again; raw Markdown text should be unchanged and editable.
-10. Edit Markdown, save, then use `Refresh Rendered View`; rendered output should update.
-11. Open a `.txt` file; rendered overlay should disappear.
-12. Switch back to `.md`; rendered mode should apply again if global rendered mode is on.
-13. Open Settings, change default mode or extensions, restart Notepad++, confirm persistence.
-14. Click an external link in rendered view; default browser should open.
-15. Restart Notepad++; no startup error or orphan overlay should appear.
+Dependencies are pinned and fetched at configure time: [cmark-gfm](https://github.com/github/cmark-gfm) (parsing/rendering), [nlohmann/json](https://github.com/nlohmann/json) (settings), the WebView2 SDK (NuGet), and a vendored [highlight.js](https://github.com/highlightjs/highlight.js) 11.9.0 (`third_party/highlight`, BSD-3-Clause).
 
 ## License
 
-MIT
+MIT (plugin). Bundled highlight.js is BSD-3-Clause; cmark-gfm is MIT/BSD-style — see their license files.

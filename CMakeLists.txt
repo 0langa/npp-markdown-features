@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(NppMarkdownFeatures VERSION 0.9.0 LANGUAGES C CXX)
+project(NppMarkdownFeatures VERSION 1.0.0 LANGUAGES C CXX RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -92,6 +92,7 @@ target_compile_definitions(nmf_core PUBLIC
 
 add_library(NppMarkdownFeatures SHARED
   src/plugin/Plugin.cpp
+  src/plugin/PluginResources.rc
   src/plugin/ExportController.cpp
   src/plugin/FormattingController.cpp
   src/plugin/LinkController.cpp

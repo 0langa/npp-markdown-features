@@ -40,12 +40,18 @@ void TestSettingsDefaultsAndRoundTrip() {
 
     settings.markdownView.defaultMode = nmf::DisplayMode::Rendered;
     settings.markdownView.extensions = {L".md", L".mdown"};
+    settings.markdownView.theme = L"dark";
+    settings.markdownView.customCssPath = L"C:\\styles\\my.css";
+    settings.markdownView.zoom = 1.5;
     store.Save(settings);
 
     auto loaded = store.Load();
     assert(loaded.markdownView.defaultMode == nmf::DisplayMode::Rendered);
     assert(loaded.markdownView.extensions.size() == 2);
     assert(loaded.markdownView.extensions[1] == L".mdown");
+    assert(loaded.markdownView.theme == L"dark");
+    assert(loaded.markdownView.customCssPath == L"C:\\styles\\my.css");
+    assert(loaded.markdownView.zoom == 1.5);
     std::filesystem::remove(path, ec);
 }
 
@@ -620,6 +626,36 @@ void TestFrontmatterRendering() {
     assert(rendered.bodyHtml.find("<hr") == std::string::npos);
 }
 
+void TestRendererThemes() {
+    nmf::MarkdownRenderer renderer;
+    const std::string markdown = "# T\n\n```cpp\nint x;\n```\n";
+
+    const auto autoTheme = renderer.Render(markdown, L"");
+    assert(autoTheme.documentHtml.find("color-scheme: light dark") != std::string::npos);
+    assert(autoTheme.documentHtml.find("@media (prefers-color-scheme: dark)") != std::string::npos);
+    assert(autoTheme.documentHtml.find(".hljs-keyword") != std::string::npos);
+
+    renderer.SetTheme("dark");
+    const auto dark = renderer.Render(markdown, L"");
+    assert(dark.documentHtml.find("color-scheme: dark") != std::string::npos);
+    assert(dark.documentHtml.find("@media (prefers-color-scheme: dark)") == std::string::npos);
+    assert(dark.documentHtml.find("background: #1f1f1f") != std::string::npos);
+
+    renderer.SetTheme("light");
+    const auto light = renderer.Render(markdown, L"");
+    assert(light.documentHtml.find("color-scheme: light") != std::string::npos);
+    assert(light.documentHtml.find("#1f1f1f") == std::string::npos);
+
+    renderer.SetTheme("bogus");  // falls back to auto
+    const auto fallback = renderer.Render(markdown, L"");
+    assert(fallback.documentHtml.find("color-scheme: light dark") != std::string::npos);
+
+    renderer.SetCustomCss("body { letter-spacing: 1px; }");
+    const auto custom = renderer.Render(markdown, L"");
+    assert(custom.documentHtml.find("/* user custom css */") != std::string::npos);
+    assert(custom.documentHtml.find("letter-spacing: 1px") != std::string::npos);
+}
+
 void TestWebViewUserDataFolder() {
     const auto folder = nmf::DefaultWebViewUserDataFolder().wstring();
     assert(folder.find(L"NppMarkdownFeatures") != std::wstring::npos);
@@ -656,6 +692,7 @@ int main() {
     TestDocumentStats();
     TestBreadcrumb();
     TestFrontmatterRendering();
+    TestRendererThemes();
     TestWebViewUserDataFolder();
     std::cout << "nmf_tests passed\n";
     return 0;

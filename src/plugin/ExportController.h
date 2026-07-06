@@ -20,6 +20,9 @@ public:
     // text (the raw HTML). Returns a status message.
     std::wstring CopyAsHtml(HWND scintilla, const std::wstring& documentPath, const std::string& markdownUtf8);
 
+    // Exports use the same theme/custom CSS as the rendered view.
+    MarkdownRenderer& Renderer();
+
 private:
     MarkdownRenderer renderer_{};
 };

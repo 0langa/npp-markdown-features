@@ -52,6 +52,7 @@ private:
 
     void ApplyDocument(const ActiveDocument& document, RenderReason reason, std::optional<std::string> knownMarkdown = std::nullopt);
     bool IsMarkdown(const ActiveDocument& document) const;
+    void ApplyRendererSettings();
 
     MarkdownViewSettings settings_{};
     bool renderedMode_{false};

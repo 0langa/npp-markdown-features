@@ -24,6 +24,8 @@ public:
     void ScrollToSourceLine(double sourceLine);
     void PrintRendered();     // opens the WebView2 print UI (browser dialog)
     void SetPrintPending();   // print once the next navigation completes
+    double ZoomFactor() const;
+    void SetZoomFactor(double zoom);  // applied now and on controller creation
     void Resize();
     void Destroy();
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -46,6 +48,8 @@ private:
     bool webViewErrorShown_{false};
     bool webViewCreating_{false};
     bool printPending_{false};
+    bool highlightPending_{false};
+    double zoomFactor_{1.0};
     Microsoft::WRL::ComPtr<ICoreWebView2Environment> environment_;
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
     Microsoft::WRL::ComPtr<ICoreWebView2> webView_;

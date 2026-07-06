@@ -66,6 +66,10 @@ bool SetClipboardPayloads(HWND owner, const std::string& cfHtmlPayload, const st
 
 }  // namespace
 
+MarkdownRenderer& ExportController::Renderer() {
+    return renderer_;
+}
+
 std::wstring ExportController::ExportHtml(HWND scintilla, HWND npp, const std::wstring& documentPath, const std::string& markdownUtf8) {
     if (scintilla == nullptr) {
         return L"Markdown Features: no editor";

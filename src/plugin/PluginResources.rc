@@ -1,0 +1,4 @@
+#include "PluginResources.h"
+
+// highlight.js v11.9.0 (BSD-3-Clause, see third_party/highlight/LICENSE).
+IDR_NMF_HLJS RCDATA "../../third_party/highlight/highlight.min.js"

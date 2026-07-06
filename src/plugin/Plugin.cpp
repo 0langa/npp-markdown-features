@@ -19,7 +19,9 @@
 #include <array>
 #include <commctrl.h>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -114,9 +116,28 @@ std::filesystem::path SettingsPath() {
     return std::filesystem::path(configRoot) / L"NppMarkdownFeatures" / L"settings.json";
 }
 
+std::string ReadFileUtf8ForExport(const std::wstring& path) {
+    if (path.empty()) {
+        return {};
+    }
+    std::ifstream input(std::filesystem::path(path), std::ios::binary);
+    if (!input) {
+        return {};
+    }
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+void SyncExportRendererSettings() {
+    g_export.Renderer().SetTheme(nmf::WideToUtf8(g_settings.markdownView.theme));
+    g_export.Renderer().SetCustomCss(ReadFileUtf8ForExport(g_settings.markdownView.customCssPath));
+}
+
 void SaveSettings() {
     if (g_settingsStore && g_markdownFeature) {
         g_markdownFeature->SaveSettings(g_settings);
+        g_settings.markdownView.zoom = g_webView.ZoomFactor();
         g_settingsStore->Save(g_settings);
     }
 }
@@ -342,6 +363,8 @@ void EnsureInitialized() {
     g_listEditing.SetSmartEnterEnabled(g_settings.listEditing.smartEnter);
     g_tableEditing.SetSmartTabEnabled(g_settings.tableEditing.smartTab);
     g_links.SetPasteUrlEnabled(g_settings.linkTools.pasteUrlAsLink);
+    g_webView.SetZoomFactor(g_settings.markdownView.zoom);
+    SyncExportRendererSettings();
     nmf::npp::SetMenuChecked(g_nppData._nppHandle, g_funcItems[kSmartTypingIndex]._cmdID, g_settings.listEditing.smartEnter);
 
     g_initialized = true;
@@ -629,6 +652,8 @@ void OpenSettings() {
     auto settings = g_markdownFeature->Settings();
     if (nmf::ShowSettingsDialog(g_nppData._nppHandle, settings, g_settingsStore->Path())) {
         g_markdownFeature->UpdateSettings(settings);
+        g_settings.markdownView = settings;
+        SyncExportRendererSettings();
         g_features.DispatchCommand(PluginCommand::RefreshRenderedView, ActiveDocument());
         UpdateToggleCheck();
         SaveSettings();

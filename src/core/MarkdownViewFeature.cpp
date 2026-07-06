@@ -2,8 +2,28 @@
 
 #include "core/Strings.h"
 
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <sstream>
 #include <utility>
+
+namespace {
+
+std::string ReadFileUtf8(const std::wstring& path) {
+    if (path.empty()) {
+        return {};
+    }
+    std::ifstream input(std::filesystem::path(path), std::ios::binary);
+    if (!input) {
+        return {};
+    }
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+}  // namespace
 
 namespace nmf {
 
@@ -36,6 +56,7 @@ std::wstring MarkdownViewFeature::DisplayName() const {
 void MarkdownViewFeature::LoadSettings(const AppSettings& settings) {
     settings_ = settings.markdownView;
     renderedMode_ = settings_.defaultMode == DisplayMode::Rendered;
+    ApplyRendererSettings();
 }
 
 void MarkdownViewFeature::SaveSettings(AppSettings& settings) const {
@@ -88,6 +109,13 @@ const MarkdownViewSettings& MarkdownViewFeature::Settings() const {
 void MarkdownViewFeature::UpdateSettings(MarkdownViewSettings settings) {
     settings_ = std::move(settings);
     renderedMode_ = settings_.defaultMode == DisplayMode::Rendered;
+    ApplyRendererSettings();
+    hasRenderedDocument_ = false;  // force a re-render with the new style
+}
+
+void MarkdownViewFeature::ApplyRendererSettings() {
+    renderer_.SetTheme(WideToUtf8(settings_.theme));
+    renderer_.SetCustomCss(ReadFileUtf8(settings_.customCssPath));
 }
 
 const BlockScrollSyncStrategy& MarkdownViewFeature::ScrollSync() const {

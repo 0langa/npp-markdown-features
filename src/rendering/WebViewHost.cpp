@@ -1,6 +1,7 @@
 #include "rendering/WebViewHost.h"
 
 #include "core/Strings.h"
+#include "plugin/PluginResources.h"
 #include "rendering/WebViewUserDataFolder.h"
 
 #include <algorithm>
@@ -39,6 +40,37 @@ bool IsExternalUri(const std::wstring& uri) {
     return lower.rfind(L"http://", 0) == 0 || lower.rfind(L"https://", 0) == 0 || lower.rfind(L"mailto:", 0) == 0;
 }
 
+// highlight.js source embedded as an RCDATA resource. Injected via
+// ExecuteScript (host-privileged) so page scripts can stay disabled —
+// markdown content can never run its own JavaScript.
+const std::wstring& HighlightScript() {
+    static const std::wstring script = [] {
+        HMODULE module = nullptr;
+        ::GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&HighlightScript),
+            &module);
+        if (module == nullptr) {
+            return std::wstring{};
+        }
+        HRSRC resource = ::FindResource(module, MAKEINTRESOURCE(IDR_NMF_HLJS), RT_RCDATA);
+        if (resource == nullptr) {
+            return std::wstring{};
+        }
+        HGLOBAL handle = ::LoadResource(module, resource);
+        const auto size = ::SizeofResource(module, resource);
+        if (handle == nullptr || size == 0) {
+            return std::wstring{};
+        }
+        const auto* data = static_cast<const char*>(::LockResource(handle));
+        if (data == nullptr) {
+            return std::wstring{};
+        }
+        return Utf8ToWide(std::string(data, size));
+    }();
+    return script;
+}
+
 void RegisterHostWindowClass() {
     static bool registered = false;
     if (registered) {
@@ -66,6 +98,7 @@ WebViewHost::~WebViewHost() {
 bool WebViewHost::ShowHtml(HWND scintillaParent, const std::string& html, const std::wstring& sourcePath, const ScrollTarget& scrollTarget) {
     parentScintilla_ = scintillaParent;
     sourcePath_ = sourcePath;
+    highlightPending_ = html.find("<pre") != std::string::npos;
     pendingHtml_ = Utf8HtmlToWide(html);
     pendingScrollTarget_ = scrollTarget;
     pendingScrollTarget_.ratio = std::clamp(pendingScrollTarget_.ratio, 0.0, 1.0);
@@ -117,6 +150,17 @@ void WebViewHost::PrintRendered() {
 
 void WebViewHost::SetPrintPending() {
     printPending_ = true;
+}
+
+double WebViewHost::ZoomFactor() const {
+    return zoomFactor_;
+}
+
+void WebViewHost::SetZoomFactor(double zoom) {
+    zoomFactor_ = std::clamp(zoom, 0.25, 5.0);
+    if (controller_) {
+        controller_->put_ZoomFactor(zoomFactor_);
+    }
 }
 
 void WebViewHost::Resize() {
@@ -204,6 +248,19 @@ bool WebViewHost::EnsureWebView() {
                                 return S_OK;
                             }
                             controller_ = controller;
+                            controller_->put_ZoomFactor(zoomFactor_);
+                            EventRegistrationToken zoomToken{};
+                            controller_->add_ZoomFactorChanged(
+                                Callback<ICoreWebView2ZoomFactorChangedEventHandler>(
+                                    [this](ICoreWebView2Controller* sender, IUnknown*) -> HRESULT {
+                                        double zoom = 1.0;
+                                        if (sender != nullptr && SUCCEEDED(sender->get_ZoomFactor(&zoom))) {
+                                            zoomFactor_ = zoom;
+                                        }
+                                        return S_OK;
+                                    })
+                                    .Get(),
+                                &zoomToken);
                             controller_->get_CoreWebView2(&webView_);
                             if (webView_) {
                                 ComPtr<ICoreWebView2Settings> settings;
@@ -233,6 +290,15 @@ bool WebViewHost::EnsureWebView() {
                                 webView_->add_NavigationCompleted(
                                     Callback<ICoreWebView2NavigationCompletedEventHandler>(
                                         [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
+                                            // Highlight first (it changes layout), then position.
+                                            if (highlightPending_) {
+                                                highlightPending_ = false;
+                                                const auto& hljs = HighlightScript();
+                                                if (!hljs.empty()) {
+                                                    webView_->ExecuteScript(hljs.c_str(), nullptr);
+                                                    webView_->ExecuteScript(L"if (window.hljs) { hljs.highlightAll(); }", nullptr);
+                                                }
+                                            }
                                             ApplyPendingScroll();
                                             if (printPending_) {
                                                 printPending_ = false;

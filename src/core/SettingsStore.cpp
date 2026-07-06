@@ -29,6 +29,9 @@ nlohmann::json ToJson(const AppSettings& settings) {
             {"toggleScope", Narrow(settings.markdownView.toggleScope)},
             {"refreshMode", Narrow(settings.markdownView.refreshMode)},
             {"extensions", extensions},
+            {"theme", Narrow(settings.markdownView.theme)},
+            {"customCss", Narrow(settings.markdownView.customCssPath)},
+            {"zoom", settings.markdownView.zoom},
         }},
         {"outline", {
             {"visible", settings.outline.visible},
@@ -70,6 +73,15 @@ AppSettings FromJson(const nlohmann::json& json) {
     }
     if (settings.markdownView.extensions.empty()) {
         settings.markdownView.extensions = {L".md", L".markdown"};
+    }
+    settings.markdownView.theme = Widen(markdown.value("theme", "auto"));
+    if (settings.markdownView.theme != L"light" && settings.markdownView.theme != L"dark") {
+        settings.markdownView.theme = L"auto";
+    }
+    settings.markdownView.customCssPath = Widen(markdown.value("customCss", ""));
+    settings.markdownView.zoom = markdown.value("zoom", 1.0);
+    if (settings.markdownView.zoom < 0.25 || settings.markdownView.zoom > 5.0) {
+        settings.markdownView.zoom = 1.0;
     }
 
     const auto outline = json.value("outline", nlohmann::json::object());

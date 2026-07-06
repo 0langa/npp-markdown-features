@@ -141,18 +141,20 @@ RenderedMarkdown MarkdownRenderer::Render(const std::string& markdownUtf8, const
     return {body, BuildDocument(body, sourcePath), outline};
 }
 
-std::string MarkdownRenderer::BuildDocument(const std::string& bodyHtml, const std::wstring& sourcePath) {
-    const auto baseUri = FileUriFromDirectory(sourcePath);
-    std::string document;
-    document.reserve(bodyHtml.size() + 4096);
-    document += "<!doctype html><html><head><meta charset=\"utf-8\">";
-    if (!baseUri.empty()) {
-        document += "<base href=\"";
-        document += EscapeHtmlText(baseUri);
-        document += "\">";
+void MarkdownRenderer::SetTheme(std::string theme) {
+    if (theme == "light" || theme == "dark") {
+        theme_ = std::move(theme);
+    } else {
+        theme_ = "auto";
     }
-    document += R"(<style>
-:root { color-scheme: light dark; }
+}
+
+void MarkdownRenderer::SetCustomCss(std::string cssUtf8) {
+    customCss_ = std::move(cssUtf8);
+}
+
+std::string MarkdownRenderer::BuildDocument(const std::string& bodyHtml, const std::wstring& sourcePath) const {
+    static const char kBaseCss[] = R"(
 body {
   box-sizing: border-box;
   max-width: 980px;
@@ -181,17 +183,64 @@ section.footnotes { margin-top: 2em; padding-top: .75em; border-top: 1px solid #
 details.nmf-frontmatter { margin: 0 0 1.25em; padding: .4em .8em; background: #f5f7f9; border: 1px solid #d7dce2; border-radius: 6px; font-size: .9em; }
 details.nmf-frontmatter summary { cursor: pointer; color: #555; }
 details.nmf-frontmatter pre { margin: .5em 0 .25em; border: none; background: transparent; padding: 0; }
-@media (prefers-color-scheme: dark) {
-  body { color: #e6e6e6; background: #1f1f1f; }
-  a { color: #8ab4f8; }
-  pre, code { background: #2b2f36; }
-  th, td, h1, pre { border-color: #454b55; }
-  blockquote { border-left-color: #5f6670; color: #c8c8c8; }
-  section.footnotes { border-top-color: #454b55; }
-  details.nmf-frontmatter { background: #2b2f36; border-color: #454b55; }
-  details.nmf-frontmatter summary { color: #b8b8b8; }
-}
-</style></head><body>)";
+.hljs-comment, .hljs-quote { color: #6a737d; }
+.hljs-keyword, .hljs-selector-tag, .hljs-subst { color: #d73a49; }
+.hljs-string, .hljs-attr, .hljs-regexp, .hljs-addition { color: #032f62; }
+.hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable { color: #005cc5; }
+.hljs-title, .hljs-name, .hljs-section, .hljs-selector-id { color: #6f42c1; }
+.hljs-built_in, .hljs-type, .hljs-class .hljs-title { color: #e36209; }
+.hljs-meta, .hljs-symbol, .hljs-bullet { color: #22863a; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+)";
+    static const char kDarkCss[] = R"(
+body { color: #e6e6e6; background: #1f1f1f; }
+a { color: #8ab4f8; }
+pre, code { background: #2b2f36; }
+th, td, h1, pre { border-color: #454b55; }
+blockquote { border-left-color: #5f6670; color: #c8c8c8; }
+section.footnotes { border-top-color: #454b55; }
+details.nmf-frontmatter { background: #2b2f36; border-color: #454b55; }
+details.nmf-frontmatter summary { color: #b8b8b8; }
+.hljs-comment, .hljs-quote { color: #8b949e; }
+.hljs-keyword, .hljs-selector-tag, .hljs-subst { color: #ff7b72; }
+.hljs-string, .hljs-attr, .hljs-regexp, .hljs-addition { color: #a5d6ff; }
+.hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable { color: #79c0ff; }
+.hljs-title, .hljs-name, .hljs-section, .hljs-selector-id { color: #d2a8ff; }
+.hljs-built_in, .hljs-type, .hljs-class .hljs-title { color: #ffa657; }
+.hljs-meta, .hljs-symbol, .hljs-bullet { color: #7ee787; }
+)";
+
+    const auto baseUri = FileUriFromDirectory(sourcePath);
+    std::string document;
+    document.reserve(bodyHtml.size() + 8192);
+    document += "<!doctype html><html><head><meta charset=\"utf-8\">";
+    if (!baseUri.empty()) {
+        document += "<base href=\"";
+        document += EscapeHtmlText(baseUri);
+        document += "\">";
+    }
+    document += "<style>\n";
+    if (theme_ == "dark") {
+        document += ":root { color-scheme: dark; }\n";
+        document += kBaseCss;
+        document += kDarkCss;
+    } else if (theme_ == "light") {
+        document += ":root { color-scheme: light; }\n";
+        document += kBaseCss;
+    } else {
+        document += ":root { color-scheme: light dark; }\n";
+        document += kBaseCss;
+        document += "@media (prefers-color-scheme: dark) {\n";
+        document += kDarkCss;
+        document += "}\n";
+    }
+    if (!customCss_.empty()) {
+        document += "/* user custom css */\n";
+        document += customCss_;
+        document += "\n";
+    }
+    document += "</style></head><body>";
     document += bodyHtml;
     document += "</body></html>";
     return document;

@@ -8,9 +8,11 @@ namespace nmf {
 namespace {
 
 constexpr int kWidth = 440;
-constexpr int kHeight = 230;
+constexpr int kHeight = 320;
 constexpr int kDefaultModeId = 1001;
 constexpr int kExtensionsId = 1002;
+constexpr int kThemeId = 1003;
+constexpr int kCustomCssId = 1004;
 constexpr int kOkId = IDOK;
 constexpr int kCancelId = IDCANCEL;
 constexpr wchar_t kSettingsClass[] = L"NppMarkdownFeaturesSettingsDialog";
@@ -74,11 +76,51 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
                 nullptr);
             ::SendMessage(edit, EM_SETLIMITTEXT, 512, 0);
 
-            AddLabel(hwnd, L"Toggle scope: global", 18, 108, 180, 22);
-            AddLabel(hwnd, L"Refresh: on save or manual refresh", 210, 108, 210, 22);
-            AddLabel(hwnd, state->settingsPath.wstring().c_str(), 18, 138, 390, 28);
-            AddButton(hwnd, L"OK", kOkId, 235, 172, 78, 28);
-            AddButton(hwnd, L"Cancel", kCancelId, 322, 172, 78, 28);
+            AddLabel(hwnd, L"Preview theme", 18, 108, 180, 22);
+            HWND theme = ::CreateWindowEx(
+                0,
+                WC_COMBOBOX,
+                L"",
+                WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
+                210,
+                106,
+                190,
+                120,
+                hwnd,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kThemeId)),
+                ::GetModuleHandle(nullptr),
+                nullptr);
+            ::SendMessage(theme, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"auto (follow system)"));
+            ::SendMessage(theme, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"light"));
+            ::SendMessage(theme, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"dark"));
+            int themeIndex = 0;
+            if (state->settings->theme == L"light") {
+                themeIndex = 1;
+            } else if (state->settings->theme == L"dark") {
+                themeIndex = 2;
+            }
+            ::SendMessage(theme, CB_SETCURSEL, themeIndex, 0);
+
+            AddLabel(hwnd, L"Custom CSS file (optional)", 18, 152, 180, 22);
+            HWND customCss = ::CreateWindowEx(
+                WS_EX_CLIENTEDGE,
+                WC_EDIT,
+                state->settings->customCssPath.c_str(),
+                WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+                210,
+                150,
+                190,
+                24,
+                hwnd,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kCustomCssId)),
+                ::GetModuleHandle(nullptr),
+                nullptr);
+            ::SendMessage(customCss, EM_SETLIMITTEXT, 1024, 0);
+
+            AddLabel(hwnd, L"Toggle scope: global · Refresh: on save", 18, 196, 390, 22);
+            AddLabel(hwnd, state->settingsPath.wstring().c_str(), 18, 222, 390, 28);
+            AddButton(hwnd, L"OK", kOkId, 235, 256, 78, 28);
+            AddButton(hwnd, L"Cancel", kCancelId, 322, 256, 78, 28);
             return 0;
         }
         case WM_COMMAND:
@@ -91,6 +133,15 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
                 const int length = ::GetWindowText(::GetDlgItem(hwnd, kExtensionsId), extensions.data(), static_cast<int>(extensions.size()));
                 extensions.resize(static_cast<size_t>(length));
                 state->settings->extensions = SplitExtensions(extensions);
+
+                const auto themeSelection = ::SendMessage(::GetDlgItem(hwnd, kThemeId), CB_GETCURSEL, 0, 0);
+                state->settings->theme = themeSelection == 1 ? L"light" : themeSelection == 2 ? L"dark" : L"auto";
+
+                std::wstring customCss(1024, L'\0');
+                const int cssLength = ::GetWindowText(::GetDlgItem(hwnd, kCustomCssId), customCss.data(), static_cast<int>(customCss.size()));
+                customCss.resize(static_cast<size_t>(cssLength));
+                state->settings->customCssPath = Trim(customCss);
+
                 state->settings->toggleScope = L"global";
                 state->settings->refreshMode = L"onSave";
                 state->accepted = true;

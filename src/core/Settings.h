@@ -15,6 +15,9 @@ struct MarkdownViewSettings {
     std::wstring toggleScope{L"global"};
     std::wstring refreshMode{L"onSave"};
     std::vector<std::wstring> extensions{L".md", L".markdown"};
+    std::wstring theme{L"auto"};        // auto | light | dark
+    std::wstring customCssPath{};       // optional user stylesheet
+    double zoom{1.0};                   // rendered view zoom factor
 };
 
 struct OutlineSettings {
