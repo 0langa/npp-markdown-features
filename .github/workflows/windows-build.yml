@@ -21,5 +21,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NppMarkdownFeatures-v0.1.0-win-x64
-          path: dist/NppMarkdownFeatures-v0.1.0-win-x64.zip
+          name: NppMarkdownFeatures-win-x64
+          path: dist/NppMarkdownFeatures-v*-win-x64.zip
