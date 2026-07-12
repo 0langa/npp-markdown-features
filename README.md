@@ -1,5 +1,10 @@
 # npp-markdown-features
 
+[![Latest release](https://img.shields.io/github/v/release/0langa/npp-markdown-features?sort=semver)](https://github.com/0langa/npp-markdown-features/releases/latest)
+[![Windows Build](https://github.com/0langa/npp-markdown-features/actions/workflows/windows-build.yml/badge.svg)](https://github.com/0langa/npp-markdown-features/actions/workflows/windows-build.yml)
+[![License: MIT](https://img.shields.io/github/license/0langa/npp-markdown-features)](LICENSE)
+![Platform: Windows x64](https://img.shields.io/badge/platform-Windows%20x64-blue)
+
 An all-in-one Markdown plugin for Notepad++ — rendering, navigation, editing assistance, tables, links, export, and cleanup in a single native plugin with one menu and one settings file.
 
 Version **1.0.0** · Windows x64 · MIT licensed · requires the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11).
@@ -22,7 +27,7 @@ All editing assists apply only to Markdown files (configurable extensions), grou
 ## Install
 
 1. Close Notepad++.
-2. Download the latest release zip and copy `plugins/NppMarkdownFeatures/NppMarkdownFeatures.dll` into `C:\Program Files\Notepad++\plugins\NppMarkdownFeatures\`.
+2. Download the latest release zip from the [**Releases** page](https://github.com/0langa/npp-markdown-features/releases/latest) and copy `plugins/NppMarkdownFeatures/NppMarkdownFeatures.dll` into `C:\Program Files\Notepad++\plugins\NppMarkdownFeatures\`.
 3. Start Notepad++ — you'll find everything under `Plugins > Markdown Features`.
 
 WebView2 profile data is stored under `%LOCALAPPDATA%\NppMarkdownFeatures\WebView2`; settings live in the Notepad++ plugin config directory as `NppMarkdownFeatures\settings.json`.
@@ -42,6 +47,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-local.ps1 -Configurat
 ```
 
 Dependencies are pinned and fetched at configure time: [cmark-gfm](https://github.com/github/cmark-gfm) (parsing/rendering), [nlohmann/json](https://github.com/nlohmann/json) (settings), the WebView2 SDK (NuGet), and a vendored [highlight.js](https://github.com/highlightjs/highlight.js) 11.9.0 (`third_party/highlight`, BSD-3-Clause).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full version history (v0.1.0 → v1.0.0).
 
 ## License
 
