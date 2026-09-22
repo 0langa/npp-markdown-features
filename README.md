@@ -7,7 +7,7 @@
 
 An all-in-one Markdown plugin for Notepad++ — rendering, navigation, editing assistance, tables, links, export, and cleanup in a single native plugin with one menu and one settings file.
 
-Version **1.0.0** · Windows x64 · MIT licensed · requires the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11).
+Version **1.0.1** · Windows x64 · MIT licensed · requires the Microsoft Edge WebView2 Runtime (preinstalled on Windows 11).
 
 ## The ten features
 
@@ -27,7 +27,7 @@ All editing assists apply only to Markdown files (configurable extensions), grou
 ## Install
 
 1. Close Notepad++.
-2. Download the latest release zip from the [**Releases** page](https://github.com/0langa/npp-markdown-features/releases/latest) and copy `plugins/NppMarkdownFeatures/NppMarkdownFeatures.dll` into `C:\Program Files\Notepad++\plugins\NppMarkdownFeatures\`.
+2. Download the latest release zip from the [**Releases** page](https://github.com/0langa/npp-markdown-features/releases/latest) and copy `NppMarkdownFeatures.dll` from the zip into `C:\Program Files\Notepad++\plugins\NppMarkdownFeatures\` (create the folder if needed).
 3. Start Notepad++ — you'll find everything under `Plugins > Markdown Features`.
 
 WebView2 profile data is stored under `%LOCALAPPDATA%\NppMarkdownFeatures\WebView2`; settings live in the Notepad++ plugin config directory as `NppMarkdownFeatures\settings.json`.

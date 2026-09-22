@@ -25,9 +25,16 @@ if (-not (Test-Path $dll)) {
 
 $dist = Join-Path $repoRoot 'dist'
 $stage = Join-Path $dist "NppMarkdownFeatures-v$version-win-x64"
-$pluginStage = Join-Path $stage 'plugins\NppMarkdownFeatures'
-New-Item -ItemType Directory -Force -Path $pluginStage | Out-Null
-Copy-Item -LiteralPath $dll -Destination (Join-Path $pluginStage 'NppMarkdownFeatures.dll') -Force
+# Plugins Admin requires the DLL at the zip root and a file version equal to the listed version.
+$fileVersion = (Get-Item -LiteralPath $dll).VersionInfo.FileVersionRaw
+if ("$fileVersion" -ne "$version.0") {
+    throw "DLL file version '$fileVersion' does not match project version $version.0"
+}
+if (Test-Path $stage) {
+    Remove-Item -LiteralPath $stage -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $stage | Out-Null
+Copy-Item -LiteralPath $dll -Destination (Join-Path $stage 'NppMarkdownFeatures.dll') -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'README.md') -Destination $stage -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination $stage -Force
 
