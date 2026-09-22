@@ -8,6 +8,17 @@ The 1.0.0 release completes the ten planned features, each shipped and verified 
 own release. Every version was unit-tested and live-verified against a real Notepad++
 instance before tagging.
 
+## [1.0.1] — 2026-09-22
+
+Packaging release for Notepad++ Plugins Admin. No feature or behaviour change.
+
+- The DLL now carries a Windows version resource (1.0.1.0). Plugins Admin requires the
+  DLL file version to match the listed version.
+- The release zip now holds `NppMarkdownFeatures.dll` at its root, the layout Plugins
+  Admin installs from. Manual install: copy that DLL into `plugins\NppMarkdownFeatures\`.
+- `scripts/package.ps1` refuses to package a DLL whose file version differs from the
+  project version.
+
 ## [1.0.0] — 2026-07-06
 
 Rendered-view polish — the tenth and final planned feature.

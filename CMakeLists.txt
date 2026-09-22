@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(NppMarkdownFeatures VERSION 1.0.0 LANGUAGES C CXX RC)
+project(NppMarkdownFeatures VERSION 1.0.1 LANGUAGES C CXX RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -109,7 +109,8 @@ set_target_properties(NppMarkdownFeatures PROPERTIES
   OUTPUT_NAME "NppMarkdownFeatures"
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
 )
-target_include_directories(NppMarkdownFeatures PRIVATE src "${WEBVIEW2_INCLUDE_DIR}")
+configure_file(src/plugin/PluginVersion.h.in "${CMAKE_BINARY_DIR}/generated/PluginVersion.h" @ONLY)
+target_include_directories(NppMarkdownFeatures PRIVATE src "${WEBVIEW2_INCLUDE_DIR}" "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(NppMarkdownFeatures PRIVATE
   nmf_core
   WebView2LoaderStatic
