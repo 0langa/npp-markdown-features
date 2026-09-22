@@ -24,12 +24,16 @@ if (-not (Test-Path (Join-Path $NotepadPlusPlusDir 'notepad++.exe'))) {
 
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    $command = "`$ErrorActionPreference='Stop'; New-Item -ItemType Directory -Force -Path `"$targetDir`" | Out-Null; Copy-Item -LiteralPath `"$sourceDll`" -Destination `"$targetDll`" -Force"
+    # Single-quoted literals keep paths with spaces (C:\Program Files) intact.
+    $quote = { param($value) "'" + ($value -replace "'", "''") + "'" }
+    $command = "`$ErrorActionPreference='Stop'; New-Item -ItemType Directory -Force -Path $(& $quote $targetDir) | Out-Null; Copy-Item -LiteralPath $(& $quote $sourceDll) -Destination $(& $quote $targetDll) -Force"
     Write-Host "Admin rights required to copy into Program Files."
     Write-Host "Elevated command:"
     Write-Host $command
     Write-Host "Launching elevated install copy..."
-    $process = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $command)
+    # Start-Process joins -ArgumentList without re-quoting, so pass the command encoded.
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    $process = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
     if ($process.ExitCode -ne 0) {
         Write-Warning "Elevated copy process exited with code $($process.ExitCode)."
     }
